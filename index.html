@@ -157,6 +157,17 @@
             padding: 8px 15px;
             font-size: 14px;
         }
+
+        /* 🔥 JSON 저장/불러오기 버튼 스타일 추가 */
+        .btn-json {
+            background: linear-gradient(135deg, #9b59b6 0%, #8e44ad 100%);
+            padding: 8px 15px;
+            font-size: 14px;
+        }
+        
+        .btn-json:hover:not(:disabled) {
+            box-shadow: 0 5px 15px rgba(155, 89, 182, 0.4);
+        }
         
         .date-controls {
             display: flex;
@@ -594,6 +605,13 @@
                     <button class="btn btn-copy" onclick="copyToExcel()">
                         📋 엑셀 복사
                     </button>
+                    <!-- 🔥 JSON 저장/불러오기 버튼 추가 -->
+                    <button class="btn btn-json" onclick="loadFromGitHubJSON()">
+                        📥 JSON 불러오기
+                    </button>
+                    <button class="btn btn-json" onclick="saveToGitHubJSON()">
+                        💾 JSON 저장하기
+                    </button>
                     <button class="btn btn-settings" onclick="toggleSettings()">
                         ⚙️ 설정
                     </button>
@@ -694,6 +712,7 @@
     <script>
         // 🔥 GitHub Pages 환경을 위한 전역 데이터 저장소
         const APP_DATA_KEY = 'stockTop30Data';
+        const GITHUB_JSON_URL = 'https://blackpb.github.io/top30/stock_data.json';
         
         // 기본 설정값
         let baseUrl = 'https://stockinfo7.com/stock/top30/text/';
@@ -719,7 +738,91 @@
         let themeDataCache = null;
         let currentThemeFileName = '';
 
-        // 🔥 GitHub Pages 환경을 위한 데이터 관리 함수들
+        // 🔥 GitHub JSON 데이터 저장소
+        let githubStockData = [];
+
+        // 🔥 GitHub JSON 관련 함수들
+        async function loadFromGitHubJSON() {
+            try {
+                showStatus('GitHub에서 JSON 데이터를 불러오는 중...', 'info');
+                
+                const response = await fetch(GITHUB_JSON_URL);
+                
+                if (!response.ok) {
+                    throw new Error(`GitHub 데이터 불러오기 실패: ${response.status}`);
+                }
+                
+                githubStockData = await response.json();
+                
+                if (!Array.isArray(githubStockData)) {
+                    throw new Error('JSON 데이터 형식이 올바르지 않습니다.');
+                }
+                
+                // 데이터 캐시에 병합
+                githubStockData.forEach(item => {
+                    if (item.id && item.data) {
+                        dataCache.set(item.id, {
+                            date: item.date || '',
+                            data: item.data
+                        });
+                    }
+                });
+                
+                showSuccess(`GitHub에서 ${githubStockData.length}개의 주식 데이터를 불러왔습니다!`);
+                
+                // 현재 데이터가 있으면 표시
+                if (dataCache.has(currentId)) {
+                    const cachedData = dataCache.get(currentId);
+                    currentRealDate = cachedData.date;
+                    createTable(cachedData.data);
+                    updateDateDisplay();
+                }
+                
+            } catch (error) {
+                console.error('GitHub JSON 로드 오류:', error);
+                showError('GitHub 데이터 불러오기 실패: ' + error.message);
+            }
+        }
+
+        function saveToGitHubJSON() {
+            try {
+                showStatus('JSON 데이터를 준비하는 중...', 'info');
+                
+                // 현재 캐시된 모든 데이터를 JSON 형식으로 변환
+                const exportData = Array.from(dataCache.entries()).map(([id, cacheData]) => ({
+                    id: id,
+                    date: cacheData.date,
+                    data: cacheData.data
+                }));
+                
+                if (exportData.length === 0) {
+                    showError('저장할 데이터가 없습니다. 먼저 데이터를 불러오세요.');
+                    return;
+                }
+                
+                // JSON 문자열 생성
+                const jsonString = JSON.stringify(exportData, null, 2);
+                
+                // 파일 다운로드
+                const blob = new Blob([jsonString], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'stock_data.json';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                
+                showSuccess(`stock_data.json 파일이 다운로드되었습니다! ${exportData.length}개의 데이터가 포함되어 있습니다. GitHub에 업로드해주세요.`);
+                
+            } catch (error) {
+                console.error('JSON 저장 오류:', error);
+                showError('JSON 데이터 저장 실패: ' + error.message);
+            }
+        }
+
+        // 🔥 수정된 saveAllData 함수 - GitHub 데이터도 저장
         function saveAllData() {
             try {
                 const appData = {
@@ -745,7 +848,8 @@
                         currentId: currentId,
                         currentRealDate: currentRealDate
                     },
-                    holidaysCache: holidaysCache
+                    holidaysCache: holidaysCache,
+                    githubStockData: githubStockData // 🔥 GitHub 데이터도 저장
                 };
 
                 localStorage.setItem(APP_DATA_KEY, JSON.stringify(appData));
@@ -755,6 +859,7 @@
             }
         }
 
+        // 🔥 수정된 loadAllData 함수 - GitHub 데이터도 로드
         function loadAllData() {
             try {
                 const savedData = localStorage.getItem(APP_DATA_KEY);
@@ -792,6 +897,11 @@
                         holidaysCache = appData.holidaysCache;
                     }
 
+                    // 🔥 GitHub 데이터 복원
+                    if (appData.githubStockData) {
+                        githubStockData = appData.githubStockData;
+                    }
+
                     console.log('모든 데이터 로드 완료');
                     return true;
                 }
@@ -800,6 +910,192 @@
             }
             return false;
         }
+
+        // 🔥 수정된 exportAllData 함수 - GitHub 데이터 포함
+        function exportAllData() {
+            try {
+                const exportData = {
+                    metadata: {
+                        version: '1.0',
+                        exportDate: new Date().toISOString(),
+                        description: '주식 Top30 데이터 백업'
+                    },
+                    baseSettings: {
+                        baseUrl: baseUrl,
+                        baseId: baseId,
+                        baseDate: baseDate.toISOString()
+                    },
+                    themeData: {
+                        data: themeDataCache,
+                        fileName: currentThemeFileName
+                    },
+                    cacheData: {
+                        dataCache: Array.from(dataCache.entries()),
+                        dateToIdCache: Array.from(dateToIdCache.entries()),
+                        dateIdCache: Array.from(dateIdCache.entries())
+                    },
+                    currentState: {
+                        currentId: currentId,
+                        currentRealDate: currentRealDate
+                    },
+                    holidaysCache: holidaysCache,
+                    githubStockData: githubStockData // 🔥 GitHub 데이터 포함
+                };
+
+                const jsonString = JSON.stringify(exportData, null, 2);
+                const blob = new Blob([jsonString], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `stock_data_backup_${new Date().toISOString().split('T')[0]}.json`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                
+                showSuccess('모든 데이터가 JSON 파일로 내보내졌습니다!');
+            } catch (error) {
+                console.error('데이터 내보내기 오류:', error);
+                showError('데이터 내보내기 중 오류가 발생했습니다: ' + error.message);
+            }
+        }
+
+        // 🔥 수정된 importAllData 함수 - GitHub 데이터 포함
+        function importAllData(file) {
+            if (!file) {
+                showError('파일을 선택해주세요.');
+                return;
+            }
+
+            if (!confirm('기존 데이터를 모두 덮어쓰고 새 데이터로 교체하시겠습니까?')) {
+                return;
+            }
+
+            const reader = new FileReader();
+            
+            reader.onload = function(e) {
+                try {
+                    const importData = JSON.parse(e.target.result);
+                    
+                    if (!importData.metadata || !importData.baseSettings) {
+                        throw new Error('잘못된 데이터 형식입니다.');
+                    }
+
+                    // 데이터 복원
+                    baseUrl = importData.baseSettings.baseUrl || baseUrl;
+                    baseId = importData.baseSettings.baseId || baseId;
+                    baseDate = new Date(importData.baseSettings.baseDate || baseDate);
+                    currentId = importData.currentState?.currentId || baseId;
+                    
+                    themeDataCache = importData.themeData?.data || {};
+                    currentThemeFileName = importData.themeData?.fileName || '';
+                    
+                    dataCache = new Map(importData.cacheData?.dataCache || []);
+                    dateToIdCache = new Map(importData.cacheData?.dateToIdCache || []);
+                    dateIdCache = new Map(importData.cacheData?.dateIdCache || []);
+                    
+                    holidaysCache = importData.holidaysCache || {};
+                    
+                    // 🔥 GitHub 데이터 복원
+                    githubStockData = importData.githubStockData || [];
+                    
+                    // UI 업데이트
+                    document.getElementById('baseUrlInput').value = baseUrl;
+                    document.getElementById('baseIdInput').value = baseId;
+                    document.getElementById('baseDateDisplay').textContent = formatDate(baseDate);
+                    updateUrlInput();
+                    updateUploadInfo();
+                    
+                    // 데이터 저장
+                    saveAllData();
+                    
+                    showSuccess('모든 데이터가 성공적으로 가져와졌습니다!');
+                    
+                    // 현재 데이터 표시
+                    if (dataCache.has(currentId)) {
+                        const cachedData = dataCache.get(currentId);
+                        currentRealDate = cachedData.date;
+                        createTable(cachedData.data);
+                        updateDateDisplay();
+                    } else {
+                        fetchData();
+                    }
+                    
+                } catch (error) {
+                    console.error('데이터 가져오기 오류:', error);
+                    showError('데이터 가져오기 중 오류가 발생했습니다: ' + error.message);
+                }
+            };
+            
+            reader.onerror = function() {
+                showError('파일 읽기 오류가 발생했습니다.');
+            };
+            
+            reader.readAsText(file);
+        }
+
+        // 🔥 수정된 showCacheInfo 함수 - GitHub 데이터 정보 추가
+        function showCacheInfo() {
+            const cacheInfo = {
+                데이터_캐시: dataCache.size,
+                날짜_ID_매핑: dateToIdCache.size,
+                테마_데이터: themeDataCache ? Object.keys(themeDataCache).length : 0,
+                GitHub_데이터: githubStockData.length
+            };
+            
+            console.log('현재 캐시 상태:', cacheInfo);
+            alert(`캐시 정보:\n- 저장된 데이터: ${cacheInfo.데이터_쐐시}개\n- 날짜 매핑: ${cacheInfo.날짜_ID_매핑}개\n- 테마 데이터: ${cacheInfo.테마_데이터}개\n- GitHub 데이터: ${cacheInfo.GitHub_데이터}개`);
+        }
+
+        // 🔥 수정된 clearAllData 함수 - GitHub 데이터도 초기화
+        function clearAllData() {
+            if (!confirm('정말로 모든 데이터를 초기화하시겠습니까?\n이 작업은 되돌릴 수 없습니다.')) {
+                return;
+            }
+
+            try {
+                localStorage.removeItem(APP_DATA_KEY);
+                
+                dataCache.clear();
+                dateToIdCache.clear();
+                dateIdCache.clear();
+                holidaysCache = {};
+                themeDataCache = null;
+                currentThemeFileName = '';
+                githubStockData = []; // 🔥 GitHub 데이터도 초기화
+                
+                baseUrl = 'https://stockinfo7.com/stock/top30/text/';
+                baseId = 1537;
+                baseDate = new Date('2025-10-21');
+                currentId = baseId;
+                currentRealDate = '';
+                
+                document.getElementById('baseUrlInput').value = baseUrl;
+                document.getElementById('baseIdInput').value = baseId;
+                document.getElementById('baseDateDisplay').textContent = formatDate(baseDate);
+                updateUrlInput();
+                updateUploadInfo();
+                
+                showSuccess('모든 데이터가 초기화되었습니다!');
+                fetchData();
+                
+            } catch (error) {
+                console.error('데이터 초기화 오류:', error);
+                showError('데이터 초기화 중 오류가 발생했습니다: ' + error.message);
+            }
+        }
+
+        // 나머지 함수들은 기존 코드와 동일하게 유지...
+        // (navigateDate, fetchData, formatDate, getTradingDayIdFromDate, getDateFromTradingDayId, 
+        //  getDateStringFromId, isTradingDay, loadHolidaysForYear, fetchHolidaysFromAPI, 
+        //  getDefaultHolidays, updateDateDisplay, updateUrlInput, loadBaseSettings, 
+        //  saveBaseSettings, toggleSettings, hideSettings, loadThemeData, updateUploadInfo, 
+        //  uploadExcelFile, parseUploadedExcel, parseCSVData, clearThemeData, getThemeFromExcel, 
+        //  toggleCalendar, showCalendar, hideCalendar, renderCalendar, changeCalendarMonth, 
+        //  selectDate, toggleSettingsCalendar, showSettingsCalendar, hideSettingsCalendar, 
+        //  renderSettingsCalendar, changeSettingsCalendarMonth, selectSettingsDate, 
+        //  adjustCalendarPosition, parseExcelData, generateFallbackData, createTable, 
+        //  copyToExcel, showError, showSuccess, updateButtonState, initialize, setupEventListeners)
 
         // 초기화
         async function initialize() {
@@ -840,6 +1136,7 @@
             // 이벤트 리스너 설정
             setupEventListeners();
         }
+
 
         function setupEventListeners() {
             document.addEventListener('click', function(event) {
@@ -1947,14 +2244,9 @@
                 prevBtn.disabled = true;
                 nextBtn.disabled = true;
             } else {
-                fetchBtn.innerHTML = '🔄 데이터 가져오기';
-                fetchBtn.disabled = false;
-                prevBtn.disabled = false;
-                nextBtn.disabled = false;
-            }
-        }
+                fetchBtn.innerHTML = '🔄 데이터 가져오기
 
-        // 앱 초기화
+// 앱 초기화
         document.addEventListener('DOMContentLoaded', initialize);
     </script>
 </body>
