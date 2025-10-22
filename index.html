@@ -705,7 +705,7 @@
         let currentCalendarDate = new Date();
         let settingsCalendarVisible = false;
 
-        // 🔥 데이터 캐시 시스템
+        // 🔥 데이터 캐시 시스템 - 웹 기반으로 변경
         let dataCache = new Map(); // ID를 키로 데이터 저장
         let dateToIdCache = new Map(); // 날짜 문자열을 키로 ID 저장
 
@@ -718,6 +718,33 @@
 
         // 날짜-ID 매핑 캐시
         let dateIdCache = new Map();
+
+        // 🔥 웹 기반 데이터 저장소 (stock_data.json 파일 사용)
+        const WEB_DATA_FILE = 'stock_data.json';
+        let webData = {
+            metadata: {
+                version: '1.0',
+                lastUpdated: new Date().toISOString()
+            },
+            baseSettings: {
+                baseUrl: baseUrl,
+                baseId: baseId,
+                baseDate: baseDate.toISOString()
+            },
+            themeData: {
+                data: {},
+                fileName: ''
+            },
+            cacheData: {
+                dataCache: [],
+                dateToIdCache: [],
+                dateIdCache: []
+            },
+            currentState: {
+                currentId: currentId,
+                currentRealDate: currentRealDate
+            }
+        };
 
         // 🔥 현재 시간에 따라 자동으로 날짜 결정하는 함수
         function getTargetDateByCurrentTime() {
@@ -760,6 +787,9 @@
         async function initialize() {
             loadBaseSettings();
             
+            // 웹 데이터 로드
+            await loadWebData();
+            
             // 현재 시간에 따라 타겟 날짜 결정
             const targetDate = getTargetDateByCurrentTime();
             const tradingDate = await findLatestTradingDay(targetDate);
@@ -776,9 +806,6 @@
             
             // 테마 데이터 로드
             await loadThemeData();
-            
-            // 🔥 캐시 데이터 로드
-            loadCacheData();
             
             // 자동으로 데이터 가져오기
             fetchData();
@@ -801,6 +828,100 @@
                     hideSettingsCalendar();
                 }
             });
+        }
+
+        // 🔥 웹 데이터 로드 함수
+        async function loadWebData() {
+            try {
+                const response = await fetch(WEB_DATA_FILE);
+                if (response.ok) {
+                    webData = await response.json();
+                    
+                    // 웹 데이터에서 캐시 복원
+                    if (webData.cacheData) {
+                        dataCache = new Map(webData.cacheData.dataCache || []);
+                        dateToIdCache = new Map(webData.cacheData.dateToIdCache || []);
+                        dateIdCache = new Map(webData.cacheData.dateIdCache || []);
+                    }
+                    
+                    // 웹 데이터에서 테마 데이터 복원
+                    if (webData.themeData) {
+                        themeDataCache = webData.themeData.data || {};
+                        currentThemeFileName = webData.themeData.fileName || '';
+                        updateUploadInfo();
+                    }
+                    
+                    // 웹 데이터에서 기본 설정 복원
+                    if (webData.baseSettings) {
+                        baseUrl = webData.baseSettings.baseUrl || baseUrl;
+                        baseId = webData.baseSettings.baseId || baseId;
+                        baseDate = new Date(webData.baseSettings.baseDate || baseDate);
+                        currentId = webData.currentState?.currentId || baseId;
+                        
+                        // UI 업데이트
+                        document.getElementById('baseUrlInput').value = baseUrl;
+                        document.getElementById('baseIdInput').value = baseId;
+                        document.getElementById('baseDateDisplay').textContent = formatDate(baseDate);
+                        updateUrlInput();
+                    }
+                    
+                    console.log('웹 데이터 로드 성공:', webData);
+                } else {
+                    console.log('웹 데이터 파일이 없습니다. 기본값을 사용합니다.');
+                }
+            } catch (error) {
+                console.error('웹 데이터 로드 실패:', error);
+            }
+        }
+
+        // 🔥 웹 데이터 저장 함수
+        async function saveWebData() {
+            try {
+                // 현재 데이터로 웹 데이터 업데이트
+                webData.metadata.lastUpdated = new Date().toISOString();
+                webData.baseSettings = {
+                    baseUrl: baseUrl,
+                    baseId: baseId,
+                    baseDate: baseDate.toISOString()
+                };
+                webData.themeData = {
+                    data: themeDataCache || {},
+                    fileName: currentThemeFileName
+                };
+                webData.cacheData = {
+                    dataCache: Array.from(dataCache.entries()),
+                    dateToIdCache: Array.from(dateToIdCache.entries()),
+                    dateIdCache: Array.from(dateIdCache.entries())
+                };
+                webData.currentState = {
+                    currentId: currentId,
+                    currentRealDate: currentRealDate
+                };
+                
+                // 실제 웹 서버에 저장하는 코드는 서버 측 구현이 필요합니다
+                // 여기서는 로컬스토리지에 임시 저장 (실제 웹 환경에서는 서버 API 호출 필요)
+                localStorage.setItem('webDataBackup', JSON.stringify(webData));
+                
+                console.log('웹 데이터 저장 완료:', webData);
+                
+                // 실제 웹 서버에 저장하는 코드 (주석 처리됨 - 서버 측 구현 필요)
+                /*
+                const response = await fetch('/save-data', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(webData)
+                });
+                
+                if (!response.ok) {
+                    throw new Error('서버 저장 실패');
+                }
+                */
+                
+            } catch (error) {
+                console.error('웹 데이터 저장 실패:', error);
+            }
         }
 
         // 🔥 모든 데이터를 JSON으로 내보내기
@@ -895,8 +1016,6 @@
                     if (importData.themeData) {
                         themeDataCache = importData.themeData.data || {};
                         currentThemeFileName = importData.themeData.fileName || '';
-                        localStorage.setItem('themeData', JSON.stringify(themeDataCache));
-                        localStorage.setItem('themeDataFileName', currentThemeFileName);
                         updateUploadInfo();
                     }
 
@@ -905,11 +1024,6 @@
                         dataCache = new Map(importData.cacheData.dataCache || []);
                         dateToIdCache = new Map(importData.cacheData.dateToIdCache || []);
                         dateIdCache = new Map(importData.cacheData.dateIdCache || []);
-                        
-                        // 로컬스토리지에 캐시 저장
-                        localStorage.setItem('dataCache', JSON.stringify(Array.from(dataCache.entries())));
-                        localStorage.setItem('dateToIdCache', JSON.stringify(Array.from(dateToIdCache.entries())));
-                        localStorage.setItem('dateIdCache', JSON.stringify(Array.from(dateIdCache.entries())));
                     }
 
                     // 현재 상태 복원
@@ -917,10 +1031,8 @@
                         currentRealDate = importData.currentState.currentRealDate || '';
                     }
 
-                    // 기본 설정 저장
-                    localStorage.setItem('stockBaseUrl', baseUrl);
-                    localStorage.setItem('stockBaseId', baseId.toString());
-                    localStorage.setItem('stockBaseDate', baseDate.toISOString());
+                    // 웹 데이터에 저장
+                    saveWebData();
 
                     showSuccess('모든 데이터가 성공적으로 가져와졌습니다!');
                     console.log('가져온 데이터:', importData);
@@ -943,47 +1055,6 @@
             reader.readAsText(file);
         }
 
-        // 🔥 캐시 데이터 로드 함수
-        function loadCacheData() {
-            try {
-                // 데이터 캐시 로드
-                const savedDataCache = localStorage.getItem('dataCache');
-                if (savedDataCache) {
-                    const cacheArray = JSON.parse(savedDataCache);
-                    dataCache = new Map(cacheArray);
-                    console.log(`캐시에서 데이터 로드: ${dataCache.size}개`);
-                }
-
-                // 날짜-ID 매핑 캐시 로드
-                const savedDateToIdCache = localStorage.getItem('dateToIdCache');
-                if (savedDateToIdCache) {
-                    const mappingArray = JSON.parse(savedDateToIdCache);
-                    dateToIdCache = new Map(mappingArray);
-                    console.log(`캐시에서 날짜 매핑 로드: ${dateToIdCache.size}개`);
-                }
-
-                // 날짜-ID 캐시 로드
-                const savedDateIdCache = localStorage.getItem('dateIdCache');
-                if (savedDateIdCache) {
-                    const dateIdArray = JSON.parse(savedDateIdCache);
-                    dateIdCache = new Map(dateIdArray);
-                }
-            } catch (error) {
-                console.error('캐시 데이터 로드 실패:', error);
-            }
-        }
-
-        // 🔥 캐시 데이터 저장 함수
-        function saveCacheData() {
-            try {
-                localStorage.setItem('dataCache', JSON.stringify(Array.from(dataCache.entries())));
-                localStorage.setItem('dateToIdCache', JSON.stringify(Array.from(dateToIdCache.entries())));
-                localStorage.setItem('dateIdCache', JSON.stringify(Array.from(dateIdCache.entries())));
-            } catch (error) {
-                console.error('캐시 데이터 저장 실패:', error);
-            }
-        }
-
         // 🔥 모든 데이터 초기화 함수
         function clearAllData() {
             if (!confirm('정말로 모든 데이터를 초기화하시겠습니까?\n이 작업은 되돌릴 수 없습니다.')) {
@@ -991,9 +1062,6 @@
             }
 
             try {
-                // 로컬스토리지 클리어
-                localStorage.clear();
-                
                 // 메모리 캐시 클리어
                 dataCache.clear();
                 dateToIdCache.clear();
@@ -1016,6 +1084,9 @@
                 updateUrlInput();
                 updateUploadInfo();
                 
+                // 웹 데이터 초기화
+                saveWebData();
+                
                 showSuccess('모든 데이터가 초기화되었습니다!');
                 
                 // 화면 새로고침
@@ -1029,7 +1100,7 @@
             }
         }
 
-        // 🔥 수정된 fetchData 함수 - 캐시 저장 추가
+        // 🔥 수정된 fetchData 함수 - 웹 데이터 저장 추가
         async function fetchData() {
             const url = document.getElementById('urlInput').value;
             const loading = document.getElementById('loading');
@@ -1132,8 +1203,8 @@
                 // 🔥 날짜-ID 매핑도 캐시에 저장
                 dateToIdCache.set(currentRealDate, currentId);
                 
-                // 🔥 캐시 데이터 저장
-                saveCacheData();
+                // 🔥 웹 데이터 저장
+                await saveWebData();
                 
                 await updateDateDisplay();
                 createTable(parsedData.data);
@@ -1314,13 +1385,11 @@
         // 테마 데이터 로드 함수
         async function loadThemeData() {
             try {
-                const savedData = localStorage.getItem('themeData');
-                const savedFileName = localStorage.getItem('themeDataFileName');
-                
-                if (savedData) {
-                    themeDataCache = JSON.parse(savedData);
-                    currentThemeFileName = savedFileName || '업로드된 파일';
-                    console.log(`로컬스토리지에서 테마 데이터 로드: ${Object.keys(themeDataCache).length}개 종목`);
+                // 웹 데이터에서 테마 데이터 로드
+                if (webData.themeData && webData.themeData.data) {
+                    themeDataCache = webData.themeData.data;
+                    currentThemeFileName = webData.themeData.fileName || '웹 데이터';
+                    console.log(`웹 데이터에서 테마 데이터 로드: ${Object.keys(themeDataCache).length}개 종목`);
                     updateUploadInfo();
                 } else {
                     // 기본 예시 데이터
@@ -1427,11 +1496,11 @@
                 themeDataCache = newThemeData;
                 currentThemeFileName = fileName;
                 
-                localStorage.setItem('themeData', JSON.stringify(themeDataCache));
-                localStorage.setItem('themeDataFileName', fileName);
-                
                 updateUploadInfo();
                 showSuccess(`엑셀 파일에서 ${validCount}개 종목의 테마 데이터를 로드했습니다!`);
+                
+                // 🔥 웹 데이터 저장
+                saveWebData();
                 
                 // 🔥 기존 캐시 데이터에 새 테마 데이터 반영
                 applyNewThemeDataToCache();
@@ -1480,7 +1549,7 @@
             
             // 변경된 캐시 저장
             if (updatedCount > 0) {
-                saveCacheData();
+                saveWebData();
                 console.log(`캐시 데이터 ${updatedCount}개 항목의 테마 정보가 업데이트되었습니다.`);
                 
                 // 현재 표시 중인 테이블도 새로고침
@@ -1534,12 +1603,14 @@
         // 테마 데이터 초기화
         function clearThemeData() {
             if (confirm('저장된 테마 데이터를 초기화하시겠습니까?')) {
-                localStorage.removeItem('themeData');
-                localStorage.removeItem('themeDataFileName');
                 themeDataCache = null;
                 currentThemeFileName = '';
                 loadThemeData();
                 updateUploadInfo();
+                
+                // 🔥 웹 데이터 저장
+                saveWebData();
+                
                 showSuccess('테마 데이터가 초기화되었습니다.');
             }
         }
@@ -1607,19 +1678,19 @@
 
         // 설정 저장/불러오기
         function loadBaseSettings() {
-            const savedBaseUrl = localStorage.getItem('stockBaseUrl');
-            const savedBaseId = localStorage.getItem('stockBaseId');
-            const savedBaseDate = localStorage.getItem('stockBaseDate');
-            
-            if (savedBaseUrl) baseUrl = savedBaseUrl;
-            if (savedBaseId) baseId = parseInt(savedBaseId);
-            if (savedBaseDate) baseDate = new Date(savedBaseDate);
-            
-            currentId = baseId;
-            
-            document.getElementById('baseUrlInput').value = baseUrl;
-            document.getElementById('baseIdInput').value = baseId;
-            document.getElementById('baseDateDisplay').textContent = formatDate(baseDate);
+            // 웹 데이터에서 기본 설정 로드
+            if (webData.baseSettings) {
+                baseUrl = webData.baseSettings.baseUrl || baseUrl;
+                baseId = webData.baseSettings.baseId || baseId;
+                baseDate = new Date(webData.baseSettings.baseDate || baseDate);
+                currentId = webData.currentState?.currentId || baseId;
+                
+                // UI 업데이트
+                document.getElementById('baseUrlInput').value = baseUrl;
+                document.getElementById('baseIdInput').value = baseId;
+                document.getElementById('baseDateDisplay').textContent = formatDate(baseDate);
+                updateUrlInput();
+            }
         }
 
         function saveBaseSettings() {
@@ -1637,13 +1708,13 @@
             baseDate = newBaseDate;
             currentId = baseId;
             
-            localStorage.setItem('stockBaseUrl', baseUrl);
-            localStorage.setItem('stockBaseId', baseId.toString());
-            localStorage.setItem('stockBaseDate', baseDate.toISOString());
-            
             updateUrlInput();
             updateDateDisplay();
             hideSettings();
+            
+            // 🔥 웹 데이터 저장
+            saveWebData();
+            
             showSuccess('설정이 저장되었습니다!');
         }
 
