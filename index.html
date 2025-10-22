@@ -7,7 +7,6 @@
     <!-- SheetJS 라이브러리 추가 -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
-        /* CSS 코드는 동일하게 유지 */
         * {
             margin: 0;
             padding: 0;
@@ -339,6 +338,7 @@
             border-collapse: collapse;
             font-size: 16px;
             min-width: 800px;
+            table-layout: fixed; /* 테이블 레이아웃 고정 */
         }
         
         th {
@@ -356,6 +356,9 @@
             padding: 18px 15px;
             border-bottom: 1px solid #e9ecef;
             font-size: 15px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
         
         tr:nth-child(even) {
@@ -367,10 +370,34 @@
             transition: all 0.2s ease;
         }
         
+        /* 테마 대/소 너비 고정 */
+        .theme-main-col {
+            width: 150px; /* 테마(대) 컬럼 너비 고정 */
+        }
+        
+        .theme-sub-col {
+            width: 200px; /* 테마(소) 컬럼 너비 고정 */
+        }
+        
+        .date-col {
+            width: 120px;
+        }
+        
+        .stock-name-col {
+            width: 180px;
+        }
+        
+        .rise-rate-col {
+            width: 120px;
+        }
+        
+        .reason-col {
+            /* 나머지 공간을 차지하도록 설정 */
+        }
+        
         .date {
             color: #95a5a6;
             font-size: 14px;
-            width: 120px;
         }
         
         .theme-main {
@@ -380,6 +407,10 @@
             border-radius: 4px;
             font-size: 13px;
             white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            display: inline-block;
+            max-width: 100%;
         }
         
         .theme-sub {
@@ -389,6 +420,10 @@
             border-radius: 4px;
             font-size: 13px;
             white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            display: inline-block;
+            max-width: 100%;
         }
         
         .stock-name {
@@ -401,7 +436,6 @@
             font-weight: bold;
             color: #e74c3c;
             text-align: right;
-            width: 120px;
             font-size: 15px;
         }
         
@@ -565,6 +599,19 @@
             
             th, td {
                 padding: 12px 8px;
+            }
+            
+            /* 모바일에서 테마 컬럼 너비 조정 */
+            .theme-main-col {
+                width: 120px;
+            }
+            
+            .theme-sub-col {
+                width: 150px;
+            }
+            
+            .stock-name-col {
+                width: 140px;
             }
         }
     </style>
@@ -2033,12 +2080,12 @@
                 <table>
                     <thead>
                         <tr>
-                            <th>테마(대)</th>
-                            <th>테마(소)</th>
-                            <th>날짜</th>
-                            <th>종목명</th>
-                            <th>상승률</th>
-                            <th>상승이유</th>
+                            <th class="theme-main-col">테마(대)</th>
+                            <th class="theme-sub-col">테마(소)</th>
+                            <th class="date-col">날짜</th>
+                            <th class="stock-name-col">종목명</th>
+                            <th class="rise-rate-col">상승률</th>
+                            <th class="reason-col">상승이유</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -2047,12 +2094,12 @@
             data.forEach(item => {
                 html += `
                     <tr>
-                        <td><span class="theme-main">${item.themeMain}</span></td>
-                        <td><span class="theme-sub">${item.themeSub}</span></td>
-                        <td class="date">${item.date}</td>
-                        <td class="stock-name">${item.stockName}</td>
-                        <td class="rise-rate">${item.riseRate}</td>
-                        <td class="reason">${item.reason}</td>
+                        <td class="theme-main-col"><span class="theme-main" title="${item.themeMain}">${item.themeMain}</span></td>
+                        <td class="theme-sub-col"><span class="theme-sub" title="${item.themeSub}">${item.themeSub}</span></td>
+                        <td class="date-col date">${item.date}</td>
+                        <td class="stock-name-col stock-name">${item.stockName}</td>
+                        <td class="rise-rate-col rise-rate">${item.riseRate}</td>
+                        <td class="reason-col reason">${item.reason}</td>
                     </tr>
                 `;
             });
