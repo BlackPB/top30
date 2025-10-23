@@ -774,6 +774,24 @@
     </div>
 
     <script>
+        // 🔥 업로드 정보 업데이트 함수를 가장 위에 정의
+        function updateUploadInfo() {
+            const uploadInfo = document.getElementById('uploadInfo');
+            if (themeDataCache && Object.keys(themeDataCache).length > 0) {
+                uploadInfo.innerHTML = `
+                    <strong>현재 테마 데이터:</strong> ${currentThemeFileName}<br>
+                    <strong>로드된 종목 수:</strong> ${Object.keys(themeDataCache).length}개
+                `;
+                uploadInfo.style.display = 'block';
+            } else {
+                uploadInfo.innerHTML = `
+                    <strong>현재 테마 데이터:</strong> 데이터 없음<br>
+                    <strong>로드된 종목 수:</strong> 0개
+                `;
+                uploadInfo.style.display = 'block';
+            }
+        }
+
         // 기본 설정값
         let baseUrl = 'https://stockinfo7.com/stock/top30/text/';
         let baseId = 1537;
@@ -827,24 +845,6 @@
                 currentRealDate: currentRealDate
             }
         };
-
-        // 🔥 업로드 정보 업데이트 함수
-        function updateUploadInfo() {
-            const uploadInfo = document.getElementById('uploadInfo');
-            if (themeDataCache && Object.keys(themeDataCache).length > 0) {
-                uploadInfo.innerHTML = `
-                    <strong>현재 테마 데이터:</strong> ${currentThemeFileName}<br>
-                    <strong>로드된 종목 수:</strong> ${Object.keys(themeDataCache).length}개
-                `;
-                uploadInfo.style.display = 'block';
-            } else {
-                uploadInfo.innerHTML = `
-                    <strong>현재 테마 데이터:</strong> 데이터 없음<br>
-                    <strong>로드된 종목 수:</strong> 0개
-                `;
-                uploadInfo.style.display = 'block';
-            }
-        }
 
         // 🔥 현재 시간에 따라 자동으로 날짜 결정하는 함수
         function getTargetDateByCurrentTime() {
@@ -1073,7 +1073,7 @@
                 
                 // 모든 캐시된 데이터에 대해 테마 정보 업데이트
                 dataCache.forEach((cachedData, id) => {
-                    if (cachedData && cachedData.data) {
+                    if (cachedData && cachedData.data && Array.isArray(cachedData.data)) {
                         cacheCount++;
                         let hasChanges = false;
                         
@@ -1110,7 +1110,9 @@
                     // 현재 표시 중인 테이블도 새로고침
                     if (dataCache.has(currentId)) {
                         const currentData = dataCache.get(currentId);
-                        createTable(currentData.data);
+                        if (currentData && Array.isArray(currentData.data)) {
+                            createTable(currentData.data);
+                        }
                     }
                 } else {
                     showSuccess('변경된 테마 정보가 없습니다.');
@@ -1437,11 +1439,19 @@
 
         // 🔥 현재 테마 데이터를 데이터에 적용하는 함수
         async function applyCurrentThemeToData(data) {
+            // 🔥 데이터 유효성 검사
+            if (!data || !Array.isArray(data)) {
+                console.error('applyCurrentThemeToData에 잘못된 데이터 전달:', data);
+                return data || [];
+            }
+            
             if (!themeDataCache || Object.keys(themeDataCache).length === 0) {
                 return data;
             }
             
             return data.map(item => {
+                if (!item || !item.stockName) return item;
+                
                 const cleanStockName = item.stockName.replace(/^\d+\.\s*/, '').trim();
                 
                 if (themeDataCache[cleanStockName]) {
@@ -1835,11 +1845,18 @@
                 saveWebData();
 
                 // 🔥 현재 표시 중인 데이터에 즉시 테마 데이터 적용
+                // 🔥 중요: createTable에 올바른 배열 데이터 전달
                 if (dataCache.has(currentId)) {
                     const currentData = dataCache.get(currentId);
-                    const updatedData = applyCurrentThemeToData(currentData.data);
-                    createTable(updatedData);
-                    showSuccess('현재 표시 중인 데이터에 테마 정보가 적용되었습니다!');
+                    // 🔥 currentData.data가 배열인지 확인
+                    if (currentData && Array.isArray(currentData.data)) {
+                        const updatedData = applyCurrentThemeToData(currentData.data);
+                        createTable(updatedData);
+                        showSuccess('현재 표시 중인 데이터에 테마 정보가 적용되었습니다!');
+                    } else {
+                        console.error('캐시 데이터가 올바른 형식이 아닙니다:', currentData);
+                        showError('캐시 데이터 형식 오류로 테마를 적용할 수 없습니다.');
+                    }
                 }
                 
             } catch (error) {
@@ -1946,7 +1963,9 @@
                 // 🔥 현재 표시 중인 데이터도 업데이트
                 if (dataCache.has(currentId)) {
                     const currentData = dataCache.get(currentId);
-                    createTable(currentData.data);
+                    if (currentData && Array.isArray(currentData.data)) {
+                        createTable(currentData.data);
+                    }
                 }
                 
                 showSuccess('테마 데이터가 초기화되었습니다. 기본 테마 데이터로 돌아갑니다.');
@@ -1955,6 +1974,65 @@
                 console.error('테마 데이터 초기화 오류:', error);
                 showError('테마 데이터 초기화 중 오류가 발생했습니다: ' + error.message);
             }
+        }
+
+        // 🔥 createTable 함수에 안전장치 추가
+        function createTable(data) {
+            // 🔥 데이터 유효성 검사 강화
+            if (!data) {
+                showError('표시할 데이터가 없습니다.');
+                return;
+            }
+            
+            // 🔥 데이터가 배열인지 확인
+            if (!Array.isArray(data)) {
+                console.error('createTable에 배열이 아닌 데이터가 전달됨:', data);
+                showError('데이터 형식이 올바르지 않습니다.');
+                return;
+            }
+            
+            if (data.length === 0) {
+                showError('표시할 데이터가 없습니다.');
+                return;
+            }
+            
+            let html = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th class="theme-main-col">테마(대)</th>
+                            <th class="theme-sub-col">테마(소)</th>
+                            <th class="date-col">날짜</th>
+                            <th class="stock-name-col">종목명</th>
+                            <th class="rise-rate-col">상승률</th>
+                            <th class="reason-col">상승이유</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+            
+            data.forEach(item => {
+                // 🔥 각 항목의 유효성도 검사
+                if (!item) return;
+                
+                html += `
+                    <tr>
+                        <td class="theme-main-col"><span class="theme-main" title="${item.themeMain || ''}">${item.themeMain || ''}</span></td>
+                        <td class="theme-sub-col"><span class="theme-sub" title="${item.themeSub || ''}">${item.themeSub || ''}</span></td>
+                        <td class="date-col date">${item.date || ''}</td>
+                        <td class="stock-name-col stock-name">${item.stockName || ''}</td>
+                        <td class="rise-rate-col rise-rate">${item.riseRate || ''}</td>
+                        <td class="reason-col reason">${item.reason || ''}</td>
+                    </tr>
+                `;
+            });
+            
+            html += `
+                    </tbody>
+                </table>
+            `;
+            
+            document.getElementById('tableContainer').innerHTML = html;
         }
 
         // 엑셀에서 테마 정보 가져오기
@@ -2364,48 +2442,6 @@
             }
             
             return data;
-        }
-
-        function createTable(data) {
-            if (!data || data.length === 0) {
-                showError('표시할 데이터가 없습니다.');
-                return;
-            }
-            
-            let html = `
-                <table>
-                    <thead>
-                        <tr>
-                            <th class="theme-main-col">테마(대)</th>
-                            <th class="theme-sub-col">테마(소)</th>
-                            <th class="date-col">날짜</th>
-                            <th class="stock-name-col">종목명</th>
-                            <th class="rise-rate-col">상승률</th>
-                            <th class="reason-col">상승이유</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-            `;
-            
-            data.forEach(item => {
-                html += `
-                    <tr>
-                        <td class="theme-main-col"><span class="theme-main" title="${item.themeMain}">${item.themeMain}</span></td>
-                        <td class="theme-sub-col"><span class="theme-sub" title="${item.themeSub}">${item.themeSub}</span></td>
-                        <td class="date-col date">${item.date}</td>
-                        <td class="stock-name-col stock-name">${item.stockName}</td>
-                        <td class="rise-rate-col rise-rate">${item.riseRate}</td>
-                        <td class="reason-col reason">${item.reason}</td>
-                    </tr>
-                `;
-            });
-            
-            html += `
-                    </tbody>
-                </table>
-            `;
-            
-            document.getElementById('tableContainer').innerHTML = html;
         }
 
         // 엑셀 복사 함수
