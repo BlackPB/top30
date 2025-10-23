@@ -344,7 +344,7 @@
             border-collapse: collapse;
             font-size: 16px;
             min-width: 800px;
-            table-layout: fixed; /* 테이블 레이아웃 고정 */
+            table-layout: fixed;
         }
         
         th {
@@ -376,13 +376,13 @@
             transition: all 0.2s ease;
         }
         
-        /* 테마 대/소 너비 고정 */
+        /* 6열 구조에 맞게 컬럼 너비 조정 */
         .theme-main-col {
-            width: 150px; /* 테마(대) 컬럼 너비 고정 */
+            width: 150px;
         }
         
         .theme-sub-col {
-            width: 200px; /* 테마(소) 컬럼 너비 고정 */
+            width: 200px;
         }
         
         .date-col {
@@ -398,7 +398,7 @@
         }
         
         .reason-col {
-            /* 나머지 공간을 차지하도록 설정 */
+            /* 나머지 공간을 차지 */
         }
         
         .date {
@@ -616,7 +616,6 @@
                 padding: 12px 8px;
             }
             
-            /* 모바일에서 테마 컬럼 너비 조정 */
             .theme-main-col {
                 width: 120px;
             }
@@ -717,7 +716,7 @@
                 <!-- 캐시 정보 표시 -->
                 <div id="cacheInfo" class="cache-info" style="display: none;"></div>
 
-                <!-- 🔥 캐시 관리 섹션 추가 -->
+                <!-- 캐시 관리 섹션 -->
                 <div class="backup-section">
                     <div class="settings-title">🗂️ 캐시 데이터 관리</div>
                     <p style="margin-bottom: 15px; color: #666; font-size: 14px;">
@@ -733,7 +732,7 @@
                     </div>
                 </div>
 
-                <!-- 🔥 백업/복원 섹션 -->
+                <!-- 백업/복원 섹션 -->
                 <div class="backup-section">
                     <div class="settings-title">📁 데이터 백업 및 복원</div>
                     <p style="margin-bottom: 15px; color: #666; font-size: 14px;">
@@ -774,7 +773,7 @@
     </div>
 
     <script>
-        // 🔥 업로드 정보 업데이트 함수를 가장 위에 정의
+        // 🔥 업로드 정보 업데이트 함수
         function updateUploadInfo() {
             const uploadInfo = document.getElementById('uploadInfo');
             if (themeDataCache && Object.keys(themeDataCache).length > 0) {
@@ -804,21 +803,19 @@
         let currentCalendarDate = new Date();
         let settingsCalendarVisible = false;
 
-        // 🔥 데이터 캐시 시스템 - 웹 기반으로 변경
-        let dataCache = new Map(); // ID를 키로 데이터 저장
-        let dateToIdCache = new Map(); // 날짜 문자열을 키로 ID 저장
+        // 🔥 데이터 캐시 시스템
+        let dataCache = new Map();
+        let dateToIdCache = new Map();
+        let dateIdCache = new Map();
 
-        // 공휴일 캐시 (API에서 가져온 데이터 저장)
+        // 공휴일 캐시
         let holidaysCache = {};
 
-        // 엑셀 테마 데이터 캐시
+        // 엑셀 테마 데이터 캐시 - 최신 데이터 우선 적용을 위한 구조
         let themeDataCache = null;
         let currentThemeFileName = '';
 
-        // 날짜-ID 매핑 캐시
-        let dateIdCache = new Map();
-
-        // 🔥 웹 기반 데이터 저장소 (stock_data.json 파일 사용)
+        // 🔥 웹 기반 데이터 저장소
         const WEB_DATA_FILE = 'stock_data.json';
         let webData = {
             metadata: {
@@ -868,49 +865,40 @@
         async function findLatestTradingDay(targetDate) {
             let checkDate = new Date(targetDate);
             let daysChecked = 0;
-            const maxDaysToCheck = 10; // 최대 10일까지 확인 (주말, 공휴일 고려)
+            const maxDaysToCheck = 10;
             
             while (daysChecked < maxDaysToCheck) {
                 if (await isTradingDay(checkDate)) {
                     return checkDate;
                 }
-                // 이전 날짜로 이동
                 checkDate.setDate(checkDate.getDate() - 1);
                 daysChecked++;
             }
             
-            // 거래일을 찾지 못한 경우 기본값 반환
             return targetDate;
         }
 
-        // 🔥 초기화 함수 수정 - 현재 시간에 따라 자동으로 날짜 설정
+        // 🔥 초기화 함수
         async function initialize() {
             loadBaseSettings();
             
-            // 웹 데이터 로드
             await loadWebData();
             
-            // 현재 시간에 따라 타겟 날짜 결정
             const targetDate = getTargetDateByCurrentTime();
             const tradingDate = await findLatestTradingDay(targetDate);
             
-            // 타겟 날짜에 해당하는 ID 계산
             currentId = await getTradingDayIdFromDate(tradingDate);
             
             updateUrlInput();
             await updateDateDisplay();
             
-            // 공휴일 데이터 미리 로드
             await loadHolidaysForYear(2025);
             await loadHolidaysForYear(2026);
             
-            // 테마 데이터 로드
             await loadThemeData();
             
-            // 캐시 정보 업데이트
             updateCacheInfo();
             
-            // 자동으로 데이터 가져오기
             fetchData();
             
             document.addEventListener('click', function(event) {
@@ -940,28 +928,24 @@
                 if (response.ok) {
                     webData = await response.json();
                     
-                    // 웹 데이터에서 캐시 복원
                     if (webData.cacheData) {
                         dataCache = new Map(webData.cacheData.dataCache || []);
                         dateToIdCache = new Map(webData.cacheData.dateToIdCache || []);
                         dateIdCache = new Map(webData.cacheData.dateIdCache || []);
                     }
                     
-                    // 웹 데이터에서 테마 데이터 복원
                     if (webData.themeData) {
                         themeDataCache = webData.themeData.data || {};
                         currentThemeFileName = webData.themeData.fileName || '';
                         updateUploadInfo();
                     }
                     
-                    // 웹 데이터에서 기본 설정 복원
                     if (webData.baseSettings) {
                         baseUrl = webData.baseSettings.baseUrl || baseUrl;
                         baseId = webData.baseSettings.baseId || baseId;
                         baseDate = new Date(webData.baseSettings.baseDate || baseDate);
                         currentId = webData.currentState?.currentId || baseId;
                         
-                        // UI 업데이트
                         document.getElementById('baseUrlInput').value = baseUrl;
                         document.getElementById('baseIdInput').value = baseId;
                         document.getElementById('baseDateDisplay').textContent = formatDate(baseDate);
@@ -980,7 +964,6 @@
         // 🔥 웹 데이터 저장 함수
         async function saveWebData() {
             try {
-                // 현재 데이터로 웹 데이터 업데이트
                 webData.metadata.lastUpdated = new Date().toISOString();
                 webData.baseSettings = {
                     baseUrl: baseUrl,
@@ -1002,8 +985,6 @@
                     currentRealDate: currentRealDate
                 };
                 
-                // 실제 웹 서버에 저장하는 코드는 서버 측 구현이 필요합니다
-                // 여기서는 로컬스토리지에 임시 저장 (실제 웹 환경에서는 서버 API 호출 필요)
                 localStorage.setItem('webDataBackup', JSON.stringify(webData));
                 
                 console.log('웹 데이터 저장 완료:', webData);
@@ -1034,20 +1015,13 @@
             }
 
             try {
-                // 주식 데이터 캐시만 클리어
                 dataCache.clear();
                 dateToIdCache.clear();
                 dateIdCache.clear();
                 
-                // 웹 데이터 저장
                 saveWebData();
-                
-                // 캐시 정보 업데이트
                 updateCacheInfo();
-                
                 showSuccess('캐시 데이터가 초기화되었습니다!');
-                
-                // 현재 데이터 다시 가져오기
                 fetchData();
                 
             } catch (error) {
@@ -1071,7 +1045,6 @@
                 let updatedCount = 0;
                 let cacheCount = 0;
                 
-                // 모든 캐시된 데이터에 대해 테마 정보 업데이트
                 dataCache.forEach((cachedData, id) => {
                     if (cachedData && cachedData.data && Array.isArray(cachedData.data)) {
                         cacheCount++;
@@ -1096,18 +1069,15 @@
                         });
                         
                         if (hasChanges) {
-                            // 변경사항이 있으면 캐시 업데이트
                             dataCache.set(id, cachedData);
                         }
                     }
                 });
                 
-                // 변경된 캐시 저장
                 if (updatedCount > 0) {
                     saveWebData();
                     showSuccess(`캐시 데이터 ${cacheCount}개 중 ${updatedCount}개 항목의 테마 정보가 업데이트되었습니다!`);
                     
-                    // 현재 표시 중인 테이블도 새로고침
                     if (dataCache.has(currentId)) {
                         const currentData = dataCache.get(currentId);
                         if (currentData && Array.isArray(currentData.data)) {
@@ -1127,7 +1097,6 @@
         // 🔥 모든 데이터를 JSON으로 내보내기
         function exportAllData() {
             try {
-                // 모든 데이터 수집
                 const exportData = {
                     metadata: {
                         version: '1.0',
@@ -1155,10 +1124,8 @@
                     }
                 };
 
-                // JSON 문자열로 변환
                 const jsonString = JSON.stringify(exportData, null, 2);
                 
-                // 파일로 다운로드
                 const blob = new Blob([jsonString], { type: 'application/json' });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
@@ -1170,7 +1137,6 @@
                 URL.revokeObjectURL(url);
                 
                 showSuccess('모든 데이터가 JSON 파일로 내보내졌습니다!');
-                console.log('내보낸 데이터:', exportData);
             } catch (error) {
                 console.error('데이터 내보내기 오류:', error);
                 showError('데이터 내보내기 중 오류가 발생했습니다: ' + error.message);
@@ -1194,54 +1160,42 @@
                 try {
                     const importData = JSON.parse(e.target.result);
                     
-                    // 데이터 유효성 검사
                     if (!importData.metadata || !importData.baseSettings) {
                         throw new Error('잘못된 데이터 형식입니다.');
                     }
 
-                    // 기본 설정 복원
                     if (importData.baseSettings) {
                         baseUrl = importData.baseSettings.baseUrl || baseUrl;
                         baseId = importData.baseSettings.baseId || baseId;
                         baseDate = new Date(importData.baseSettings.baseDate || baseDate);
                         currentId = importData.currentState?.currentId || baseId;
                         
-                        // UI 업데이트
                         document.getElementById('baseUrlInput').value = baseUrl;
                         document.getElementById('baseIdInput').value = baseId;
                         document.getElementById('baseDateDisplay').textContent = formatDate(baseDate);
                         updateUrlInput();
                     }
 
-                    // 테마 데이터 복원
                     if (importData.themeData) {
                         themeDataCache = importData.themeData.data || {};
                         currentThemeFileName = importData.themeData.fileName || '';
                         updateUploadInfo();
                     }
 
-                    // 캐시 데이터 복원
                     if (importData.cacheData) {
                         dataCache = new Map(importData.cacheData.dataCache || []);
                         dateToIdCache = new Map(importData.cacheData.dateToIdCache || []);
                         dateIdCache = new Map(importData.cacheData.dateIdCache || []);
                     }
 
-                    // 현재 상태 복원
                     if (importData.currentState) {
                         currentRealDate = importData.currentState.currentRealDate || '';
                     }
 
-                    // 웹 데이터에 저장
                     saveWebData();
-
-                    // 캐시 정보 업데이트
                     updateCacheInfo();
-
                     showSuccess('모든 데이터가 성공적으로 가져와졌습니다!');
-                    console.log('가져온 데이터:', importData);
                     
-                    // 화면 새로고침
                     setTimeout(() => {
                         location.reload();
                     }, 1000);
@@ -1266,7 +1220,6 @@
             }
 
             try {
-                // 모든 캐시 클리어
                 dataCache.clear();
                 dateToIdCache.clear();
                 dateIdCache.clear();
@@ -1274,29 +1227,23 @@
                 themeDataCache = {};
                 currentThemeFileName = '';
                 
-                // 기본값으로 재설정
                 baseUrl = 'https://stockinfo7.com/stock/top30/text/';
                 baseId = 1537;
                 baseDate = new Date('2025-10-21');
                 currentId = baseId;
                 currentRealDate = '';
                 
-                // UI 업데이트
                 document.getElementById('baseUrlInput').value = baseUrl;
                 document.getElementById('baseIdInput').value = baseId;
                 document.getElementById('baseDateDisplay').textContent = formatDate(baseDate);
                 updateUrlInput();
                 
-                // 🔥 업로드 정보 업데이트 호출
                 updateUploadInfo();
                 updateCacheInfo();
-                
-                // 웹 데이터 초기화
                 saveWebData();
                 
                 showSuccess('모든 데이터가 초기화되었습니다!');
                 
-                // 화면 새로고침
                 setTimeout(() => {
                     location.reload();
                 }, 1000);
@@ -1307,7 +1254,7 @@
             }
         }
 
-        // 🔥 수정된 fetchData 함수 - 웹 데이터 저장 추가
+        // 🔥 수정된 fetchData 함수
         async function fetchData() {
             const url = document.getElementById('urlInput').value;
             const loading = document.getElementById('loading');
@@ -1326,7 +1273,6 @@
                 const cachedData = dataCache.get(currentId);
                 currentRealDate = cachedData.date;
                 
-                // 🔥 중요: 캐시 데이터를 표시할 때 항상 최신 테마 데이터 적용
                 const updatedData = await applyCurrentThemeToData(cachedData.data);
                 createTable(updatedData);
                 
@@ -1405,24 +1351,16 @@
                 
                 currentRealDate = parsedData.date;
                 
-                // 🔥 중요: 데이터를 캐시에 저장할 때 최신 테마 데이터 적용
                 const dataWithCurrentTheme = await applyCurrentThemeToData(parsedData.data);
                 
-                // 🔥 데이터 캐시에 저장
                 dataCache.set(currentId, {
                     date: currentRealDate,
                     data: dataWithCurrentTheme
                 });
                 
-                // 🔥 날짜-ID 매핑도 캐시에 저장
                 dateToIdCache.set(currentRealDate, currentId);
-                
-                // 🔥 웹 데이터 저장
                 await saveWebData();
-                
-                // 🔥 캐시 정보 업데이트
                 updateCacheInfo();
-                
                 await updateDateDisplay();
                 createTable(dataWithCurrentTheme);
                 showSuccess('데이터를 성공적으로 가져왔습니다! (최신 테마 데이터 적용)');
@@ -1439,7 +1377,6 @@
 
         // 🔥 현재 테마 데이터를 데이터에 적용하는 함수
         async function applyCurrentThemeToData(data) {
-            // 🔥 데이터 유효성 검사
             if (!data || !Array.isArray(data)) {
                 console.error('applyCurrentThemeToData에 잘못된 데이터 전달:', data);
                 return data || [];
@@ -1544,7 +1481,6 @@
                 const dateString = await getDateStringFromId(currentId);
                 dateDisplay.textContent = dateString;
                 
-                // 🔥 현재 시간 정보도 표시
                 const now = new Date();
                 const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
                 const targetDate = getTargetDateByCurrentTime();
@@ -1557,18 +1493,14 @@
             }
         }
 
-        // 🔥 수정된 selectDate 함수 - 정확한 날짜 매핑
+        // 🔥 수정된 selectDate 함수
         async function selectDate(dateString) {
             try {
                 const selectedDate = new Date(dateString.replace(/\./g, '-'));
-                
-                // 🔥 정확한 날짜-ID 매핑 계산
                 const newId = await getTradingDayIdFromDate(selectedDate);
                 currentId = Math.max(1, newId);
                 updateUrlInput();
                 hideCalendar();
-                
-                // 🔥 즉시 데이터 가져오기
                 await fetchData();
                 
             } catch (error) {
@@ -1577,7 +1509,7 @@
             }
         }
 
-        // 🔥 수정된 navigateDate 함수 - 날짜 이동 시 캐시 활용
+        // 🔥 수정된 navigateDate 함수
         async function navigateDate(direction) {
             try {
                 let newId = currentId + direction;
@@ -1585,8 +1517,6 @@
                 
                 currentId = newId;
                 updateUrlInput();
-                
-                // 🔥 캐시 확인 후 데이터 가져오기
                 await fetchData();
                 
             } catch (error) {
@@ -1595,9 +1525,8 @@
             }
         }
 
-        // 🔥 날짜에서 ID 계산 함수 추가
+        // 🔥 날짜에서 ID 계산 함수
         async function getTradingDayIdFromDate(targetDate) {
-            // 이미 캐시에 있는지 확인
             const dateString = formatDate(targetDate);
             if (dateToIdCache.has(dateString)) {
                 return dateToIdCache.get(dateString);
@@ -1613,7 +1542,6 @@
                     tradingDaysCount += direction;
                 }
                 
-                // 무한 루프 방지
                 if (Math.abs(tradingDaysCount) > 1000) {
                     throw new Error('날짜 계산 실패: 너무 많은 거래일 차이');
                 }
@@ -1621,25 +1549,21 @@
             
             const newId = baseId + tradingDaysCount;
             
-            // 캐시에 저장
             dateToIdCache.set(dateString, newId);
             dateIdCache.set(newId, targetDate.toISOString());
             
             return newId;
         }
 
-        // 테마 데이터 로드 함수
+        // 🔥 테마 데이터 로드 함수
         async function loadThemeData() {
             try {
-                // 웹 데이터에서 테마 데이터 로드
                 if (webData.themeData && webData.themeData.data) {
                     themeDataCache = webData.themeData.data;
                     currentThemeFileName = webData.themeData.fileName || '웹 데이터';
                     console.log(`웹 데이터에서 테마 데이터 로드: ${Object.keys(themeDataCache).length}개 종목`);
-                    // 🔥 업로드 정보 업데이트 호출
                     updateUploadInfo();
                 } else {
-                    // 기본 예시 데이터
                     themeDataCache = {
                         '삼성전자': { main: '반도체', sub: '메모리반도체' },
                         'SK하이닉스': { main: '반도체', sub: '메모리반도체' },
@@ -1652,14 +1576,12 @@
                     };
                     currentThemeFileName = '기본 데이터';
                     console.log('기본 테마 데이터 사용');
-                    // 🔥 업로드 정보 업데이트 호출
                     updateUploadInfo();
                 }
             } catch (error) {
                 console.error('테마 데이터 로드 실패:', error);
                 themeDataCache = {};
                 currentThemeFileName = '데이터 없음';
-                // 🔥 업로드 정보 업데이트 호출
                 updateUploadInfo();
             }
         }
@@ -1674,13 +1596,11 @@
                 return;
             }
             
-            // 🔥 파일 크기 제한
             if (file.size > 10 * 1024 * 1024) {
                 showError('파일 크기가 너무 큽니다. 10MB 이하의 파일을 선택해주세요.');
                 return;
             }
             
-            // 🔥 파일 형식 검사
             const fileExtension = file.name.split('.').pop().toLowerCase();
             const allowedExtensions = ['xlsx', 'xls', 'csv'];
             
@@ -1704,245 +1624,149 @@
                 showError('파일 읽기 오류가 발생했습니다.');
             };
             
-            // 🔥 파일 형식에 따른 읽기 방식
             if (fileExtension === 'csv') {
                 reader.readAsText(file, 'UTF-8');
             } else {
                 reader.readAsBinaryString(file);
             }
             
-            // 🔥 로딩 표시
             showSuccess('파일을 처리 중입니다...');
         }
 
-     // 🔥 수정된 업로드된 엑셀 파일 파싱 함수 - 최근 데이터가 위에 오도록
-function parseUploadedExcel(data, fileName) {
-    try {
-        let jsonData = [];
-        
-        if (fileName.endsWith('.csv')) {
-            jsonData = parseCSVData(data);
-        } else {
-            if (typeof XLSX === 'undefined') {
-                showError('엑셀 파싱 라이브러리를 로드할 수 없습니다.');
-                return;
-            }
-            
-            const workbook = XLSX.read(data, { type: 'binary' });
-            const firstSheetName = workbook.SheetNames[0];
-            const worksheet = workbook.Sheets[firstSheetName];
-            
-            // 🔥 다양한 옵션으로 시도
+        // 🔥 수정된 업로드된 엑셀 파일 파싱 함수 - 최신 데이터가 위에 오도록
+        function parseUploadedExcel(data, fileName) {
             try {
-                // 첫 번째 시도: 기본 방식
-                jsonData = XLSX.utils.sheet_to_json(worksheet);
-            } catch (e1) {
-                try {
-                    // 두 번째 시도: 헤더 옵션 사용
-                    jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-                    // 헤더 배열을 객체로 변환
-                    if (jsonData.length > 0 && Array.isArray(jsonData[0])) {
-                        const headers = jsonData[0];
-                        jsonData = jsonData.slice(1).map(row => {
-                            const obj = {};
-                            headers.forEach((header, index) => {
-                                if (header && row[index] !== undefined) {
-                                    obj[header] = row[index];
-                                }
-                            });
-                            return obj;
-                        });
+                let jsonData = [];
+                
+                if (fileName.endsWith('.csv')) {
+                    jsonData = parseCSVData(data);
+                } else {
+                    if (typeof XLSX === 'undefined') {
+                        showError('엑셀 파싱 라이브러리를 로드할 수 없습니다.');
+                        return;
                     }
-                } catch (e2) {
+                    
+                    const workbook = XLSX.read(data, { type: 'binary' });
+                    const firstSheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[firstSheetName];
+                    
                     try {
-                        // 세 번째 시도: raw 데이터 사용
-                        jsonData = XLSX.utils.sheet_to_json(worksheet, { raw: false });
-                    } catch (e3) {
-                        throw new Error(`엑셀 파싱 실패: ${e1.message}, ${e2.message}, ${e3.message}`);
+                        jsonData = XLSX.utils.sheet_to_json(worksheet);
+                    } catch (e1) {
+                        try {
+                            jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+                            if (jsonData.length > 0 && Array.isArray(jsonData[0])) {
+                                const headers = jsonData[0];
+                                jsonData = jsonData.slice(1).map(row => {
+                                    const obj = {};
+                                    headers.forEach((header, index) => {
+                                        if (header && row[index] !== undefined) {
+                                            obj[header] = row[index];
+                                        }
+                                    });
+                                    return obj;
+                                });
+                            }
+                        } catch (e2) {
+                            try {
+                                jsonData = XLSX.utils.sheet_to_json(worksheet, { raw: false });
+                            } catch (e3) {
+                                throw new Error(`엑셀 파싱 실패: ${e1.message}, ${e2.message}, ${e3.message}`);
+                            }
+                        }
                     }
                 }
-            }
-        }
-        
-        console.log('파싱된 엑셀 데이터:', jsonData);
-        
-        // 🔥 데이터 유효성 검사 강화
-        if (!jsonData || !Array.isArray(jsonData)) {
-            throw new Error('엑셀 데이터를 배열로 변환할 수 없습니다.');
-        }
-        
-        if (jsonData.length === 0) {
-            throw new Error('엑셀 파일에 데이터가 없습니다.');
-        }
-        
-        const newThemeData = {};
-        let validCount = 0;
-        let skippedCount = 0;
-        
-        // 🔥 중요: 엑셀 데이터를 정방향으로 처리 (최신 데이터가 위에 있으므로)
-        // 원본 순서를 유지하면서 중복된 경우 나중에 나온 데이터(더 아래 있는 데이터)를 덮어씀
-        jsonData.forEach((row, index) => {
-            try {
-                // 🔥 다양한 컬럼명 패턴 시도
-                const stockName = 
-                    row['종목명'] || row['종목'] || row['Stock Name'] || row['Stock'] || 
-                    row['stock'] || row['name'] || row['Name'] || row['종목명칭'] ||
-                    row['기업명'] || row['회사명'] || row['company'] || row['Company'];
                 
-                const themeMain = 
-                    row['테마(대)'] || row['테마대'] || row['대테마'] || row['Main Theme'] || 
-                    row['main'] || row['테마'] || row['Theme'] || row['대분류'] ||
-                    row['주요테마'] || row['primary_theme'] || row['테마 대'];
+                console.log('파싱된 엑셀 데이터:', jsonData);
                 
-                const themeSub = 
-                    row['테마(소)'] || row['테마소'] || row['소테마'] || row['Sub Theme'] || 
-                    row['sub'] || row['세부테마'] || row['sub_theme'] || row['소분류'] ||
-                    row['상세테마'] || row['테마 소'];
+                if (!jsonData || !Array.isArray(jsonData)) {
+                    throw new Error('엑셀 데이터를 배열로 변환할 수 없습니다.');
+                }
                 
-                console.log(`행 ${index}: 종목명=${stockName}, 테마대=${themeMain}, 테마소=${themeSub}`);
+                if (jsonData.length === 0) {
+                    throw new Error('엑셀 파일에 데이터가 없습니다.');
+                }
                 
-                if (stockName && themeMain && themeSub) {
-                    const cleanStockName = stockName.toString().trim();
-                    
-                    if (cleanStockName) {
-                        // 🔥 동일 종목이 여러 번 나오는 경우, 가장 최근 데이터(더 아래 있는 데이터)가 유지됨
-                        // 엑셀에서 아래쪽 행이 더 최신 데이터이므로 나중에 처리되는 데이터가 우선 적용됨
-                        newThemeData[cleanStockName] = {
-                            main: themeMain.toString().trim(),
-                            sub: themeSub.toString().trim()
-                        };
-                        validCount++;
-                    } else {
+                const newThemeData = {};
+                let validCount = 0;
+                let skippedCount = 0;
+                
+                // 🔥 중요: 엑셀 데이터를 정방향으로 처리 (최신 데이터가 위에 있으므로)
+                jsonData.forEach((row, index) => {
+                    try {
+                        const stockName = 
+                            row['종목명'] || row['종목'] || row['Stock Name'] || row['Stock'] || 
+                            row['stock'] || row['name'] || row['Name'] || row['종목명칭'] ||
+                            row['기업명'] || row['회사명'] || row['company'] || row['Company'];
+                        
+                        const themeMain = 
+                            row['테마(대)'] || row['테마대'] || row['대테마'] || row['Main Theme'] || 
+                            row['main'] || row['테마'] || row['Theme'] || row['대분류'] ||
+                            row['주요테마'] || row['primary_theme'] || row['테마 대'];
+                        
+                        const themeSub = 
+                            row['테마(소)'] || row['테마소'] || row['소테마'] || row['Sub Theme'] || 
+                            row['sub'] || row['세부테마'] || row['sub_theme'] || row['소분류'] ||
+                            row['상세테마'] || row['테마 소'];
+                        
+                        console.log(`행 ${index}: 종목명=${stockName}, 테마대=${themeMain}, 테마소=${themeSub}`);
+                        
+                        if (stockName && themeMain && themeSub) {
+                            const cleanStockName = stockName.toString().trim();
+                            
+                            if (cleanStockName) {
+                                // 🔥 동일 종목이 여러 번 나오는 경우, 가장 최근 데이터(더 아래 있는 데이터)가 유지됨
+                                newThemeData[cleanStockName] = {
+                                    main: themeMain.toString().trim(),
+                                    sub: themeSub.toString().trim()
+                                };
+                                validCount++;
+                            } else {
+                                skippedCount++;
+                            }
+                        } else {
+                            skippedCount++;
+                            console.warn(`행 ${index} 건너뜀 - 필수 데이터 없음:`, { stockName, themeMain, themeSub });
+                        }
+                    } catch (rowError) {
+                        console.error(`행 ${index} 처리 중 오류:`, rowError);
                         skippedCount++;
                     }
-                } else {
-                    skippedCount++;
-                    console.warn(`행 ${index} 건너뜀 - 필수 데이터 없음:`, { stockName, themeMain, themeSub });
-                }
-            } catch (rowError) {
-                console.error(`행 ${index} 처리 중 오류:`, rowError);
-                skippedCount++;
-            }
-        });
-        
-        console.log(`처리 결과: ${validCount}개 유효, ${skippedCount}개 건너뜀`);
-        
-        if (validCount === 0) {
-            // 🔥 사용자에게 컬럼 구조를 보여주는 도움말
-            const sampleRow = jsonData[0];
-            const availableColumns = sampleRow ? Object.keys(sampleRow) : ['데이터 없음'];
-            throw new Error(`유효한 데이터를 찾을 수 없습니다. \n사용 가능한 컬럼: ${availableColumns.join(', ')}\n필요한 컬럼: 종목명, 테마(대), 테마(소)`);
-        }
-        
-        themeDataCache = newThemeData;
-        currentThemeFileName = fileName;
-        
-        // 🔥 업로드 정보 업데이트 호출
-        updateUploadInfo();
-        showSuccess(`엑셀 파일에서 ${validCount}개 종목의 테마 데이터를 로드했습니다! (${skippedCount}개 건너뜀, 최신 데이터 우선)`);
-        
-        // 🔥 웹 데이터 저장
-        saveWebData();
-
-        // 🔥 현재 표시 중인 데이터에 즉시 테마 데이터 적용
-        if (dataCache.has(currentId)) {
-            const currentData = dataCache.get(currentId);
-            // 🔥 currentData.data가 배열인지 확인
-            if (currentData && Array.isArray(currentData.data)) {
-                const updatedData = applyCurrentThemeToData(currentData.data);
-                createTable(updatedData);
-                showSuccess('현재 표시 중인 데이터에 테마 정보가 적용되었습니다!');
-            } else {
-                console.error('캐시 데이터가 올바른 형식이 아닙니다:', currentData);
-                showError('캐시 데이터 형식 오류로 테마를 적용할 수 없습니다.');
-            }
-        }
-        
-    } catch (error) {
-        console.error('엑셀 파일 파싱 실패:', error);
-        showError('엑셀 파일 파싱 실패: ' + error.message);
-    }
-}
-
-// 🔥 수정된 CSV 데이터 파싱 함수 - 최신 데이터가 위에 오도록
-function parseCSVData(csvText) {
-    try {
-        const lines = csvText.split('\n').filter(line => line.trim() !== '');
-        
-        if (lines.length === 0) {
-            throw new Error('CSV 파일이 비어있습니다.');
-        }
-        
-        // 🔥 다양한 구분자 시도
-        let delimiter = ',';
-        const firstLine = lines[0];
-        
-        // 구분자 감지
-        if (firstLine.includes('\t')) {
-            delimiter = '\t';
-        } else if (firstLine.includes(';')) {
-            delimiter = ';';
-        } else if (firstLine.includes('|')) {
-            delimiter = '|';
-        }
-        
-        console.log(`CSV 구분자 감지: "${delimiter}"`);
-        
-        const headers = firstLine.split(delimiter).map(header => 
-            header.trim().replace(/^"|"$/g, '').replace(/\s+/g, ' ')
-        );
-        
-        const result = [];
-        
-        // 🔥 CSV 데이터를 정방향으로 처리 (첫 번째 행이 헤더, 두 번째 행부터 데이터)
-        for (let i = 1; i < lines.length; i++) {
-            const line = lines[i].trim();
-            if (!line) continue;
-            
-            // 🔥 CSV 값 파싱 개선 (쉼표 내부의 따옴표 처리)
-            const values = [];
-            let currentValue = '';
-            let inQuotes = false;
-            
-            for (let j = 0; j < line.length; j++) {
-                const char = line[j];
+                });
                 
-                if (char === '"') {
-                    inQuotes = !inQuotes;
-                } else if (char === delimiter && !inQuotes) {
-                    values.push(currentValue.trim().replace(/^"|"$/g, ''));
-                    currentValue = '';
-                } else {
-                    currentValue += char;
+                console.log(`처리 결과: ${validCount}개 유효, ${skippedCount}개 건너뜀`);
+                
+                if (validCount === 0) {
+                    const sampleRow = jsonData[0];
+                    const availableColumns = sampleRow ? Object.keys(sampleRow) : ['데이터 없음'];
+                    throw new Error(`유효한 데이터를 찾을 수 없습니다. \n사용 가능한 컬럼: ${availableColumns.join(', ')}\n필요한 컬럼: 종목명, 테마(대), 테마(소)`);
                 }
-            }
-            
-            // 마지막 값 추가
-            values.push(currentValue.trim().replace(/^"|"$/g, ''));
-            
-            const row = {};
-            let hasData = false;
-            
-            headers.forEach((header, index) => {
-                if (values[index] && values[index] !== '') {
-                    row[header] = values[index];
-                    hasData = true;
+                
+                themeDataCache = newThemeData;
+                currentThemeFileName = fileName;
+                
+                updateUploadInfo();
+                showSuccess(`엑셀 파일에서 ${validCount}개 종목의 테마 데이터를 로드했습니다! (${skippedCount}개 건너뜀, 최신 데이터 우선)`);
+                
+                saveWebData();
+
+                if (dataCache.has(currentId)) {
+                    const currentData = dataCache.get(currentId);
+                    if (currentData && Array.isArray(currentData.data)) {
+                        const updatedData = applyCurrentThemeToData(currentData.data);
+                        createTable(updatedData);
+                        showSuccess('현재 표시 중인 데이터에 테마 정보가 적용되었습니다!');
+                    } else {
+                        console.error('캐시 데이터가 올바른 형식이 아닙니다:', currentData);
+                        showError('캐시 데이터 형식 오류로 테마를 적용할 수 없습니다.');
+                    }
                 }
-            });
-            
-            if (hasData) {
-                result.push(row);
+                
+            } catch (error) {
+                console.error('엑셀 파일 파싱 실패:', error);
+                showError('엑셀 파일 파싱 실패: ' + error.message);
             }
         }
-        
-        console.log('CSV 파싱 결과:', result);
-        return result;
-        
-    } catch (error) {
-        console.error('CSV 파싱 오류:', error);
-        throw new Error('CSV 파일 파싱 실패: ' + error.message);
-    }
-}
 
         // 🔥 수정된 CSV 데이터 파싱 함수
         function parseCSVData(csvText) {
@@ -1953,11 +1777,9 @@ function parseCSVData(csvText) {
                     throw new Error('CSV 파일이 비어있습니다.');
                 }
                 
-                // 🔥 다양한 구분자 시도
                 let delimiter = ',';
                 const firstLine = lines[0];
                 
-                // 구분자 감지
                 if (firstLine.includes('\t')) {
                     delimiter = '\t';
                 } else if (firstLine.includes(';')) {
@@ -1978,7 +1800,6 @@ function parseCSVData(csvText) {
                     const line = lines[i].trim();
                     if (!line) continue;
                     
-                    // 🔥 CSV 값 파싱 개선 (쉼표 내부의 따옴표 처리)
                     const values = [];
                     let currentValue = '';
                     let inQuotes = false;
@@ -1996,7 +1817,6 @@ function parseCSVData(csvText) {
                         }
                     }
                     
-                    // 마지막 값 추가
                     values.push(currentValue.trim().replace(/^"|"$/g, ''));
                     
                     const row = {};
@@ -2032,14 +1852,9 @@ function parseCSVData(csvText) {
             try {
                 themeDataCache = {};
                 currentThemeFileName = '';
-                
-                // 🔥 기본 테마 데이터 로드
                 loadThemeData();
-                
-                // 🔥 웹 데이터 저장
                 saveWebData();
                 
-                // 🔥 현재 표시 중인 데이터도 업데이트
                 if (dataCache.has(currentId)) {
                     const currentData = dataCache.get(currentId);
                     if (currentData && Array.isArray(currentData.data)) {
@@ -2055,15 +1870,13 @@ function parseCSVData(csvText) {
             }
         }
 
-        // 🔥 createTable 함수에 안전장치 추가
+        // 🔥 createTable 함수 - 6열 구조로 수정
         function createTable(data) {
-            // 🔥 데이터 유효성 검사 강화
             if (!data) {
                 showError('표시할 데이터가 없습니다.');
                 return;
             }
             
-            // 🔥 데이터가 배열인지 확인
             if (!Array.isArray(data)) {
                 console.error('createTable에 배열이 아닌 데이터가 전달됨:', data);
                 showError('데이터 형식이 올바르지 않습니다.');
@@ -2091,7 +1904,6 @@ function parseCSVData(csvText) {
             `;
             
             data.forEach(item => {
-                // 🔥 각 항목의 유효성도 검사
                 if (!item) return;
                 
                 html += `
@@ -2177,14 +1989,12 @@ function parseCSVData(csvText) {
 
         // 설정 저장/불러오기
         function loadBaseSettings() {
-            // 웹 데이터에서 기본 설정 로드
             if (webData.baseSettings) {
                 baseUrl = webData.baseSettings.baseUrl || baseUrl;
                 baseId = webData.baseSettings.baseId || baseId;
                 baseDate = new Date(webData.baseSettings.baseDate || baseDate);
                 currentId = webData.currentState?.currentId || baseId;
                 
-                // UI 업데이트
                 document.getElementById('baseUrlInput').value = baseUrl;
                 document.getElementById('baseIdInput').value = baseId;
                 document.getElementById('baseDateDisplay').textContent = formatDate(baseDate);
@@ -2210,10 +2020,7 @@ function parseCSVData(csvText) {
             updateUrlInput();
             updateDateDisplay();
             hideSettings();
-            
-            // 🔥 웹 데이터 저장
             saveWebData();
-            
             showSuccess('설정이 저장되었습니다!');
         }
 
