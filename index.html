@@ -696,12 +696,15 @@
                     <div class="form-group" style="grid-column: 1 / -1;">
                         <label for="excelFileUpload">엑셀 파일 업로드</label>
                         <input type="file" id="excelFileUpload" accept=".xlsx,.xls,.csv" class="file-input">
-                        <div style="display: flex; gap: 10px; margin-top: 10px;">
+                        <div style="display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap;">
                             <button class="btn btn-upload" onclick="uploadExcelFile()">
                                 📤 파일 업로드
                             </button>
                             <button class="btn btn-settings" onclick="clearThemeData()">
                                 🗑️ 테마 데이터 초기화
+                            </button>
+                            <button class="btn btn-settings" onclick="checkThemeData()">
+                                🔍 테마 데이터 확인
                             </button>
                         </div>
                         <small style="color: #666; margin-top: 5px;">
@@ -910,7 +913,31 @@
             return targetDate;
         }
 
-        // 🔥 웹 데이터 저장 함수 수정 - localStorage와 웹 데이터 파일 모두 저장
+        // 🔥 JSON 파일로 저장하는 함수 추가
+        async function saveToJsonFile(data) {
+            try {
+                const jsonString = JSON.stringify(data, null, 2);
+                const blob = new Blob([jsonString], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                
+                // 🔥 숨겨진 링크를 통해 파일 다운로드
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'stock_data.json';
+                a.style.display = 'none';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                
+                console.log('JSON 파일 다운로드 완료');
+            } catch (error) {
+                console.error('JSON 파일 저장 오류:', error);
+                throw error;
+            }
+        }
+
+        // 🔥 웹 데이터 저장 함수 수정 - 실제 파일 저장 기능 추가
         async function saveWebData() {
             try {
                 webData.metadata.lastUpdated = new Date().toISOString();
@@ -937,13 +964,17 @@
                 // 🔥 localStorage에 저장 (즉시 사용 가능)
                 localStorage.setItem('webDataBackup', JSON.stringify(webData));
                 
-                // 🔥 웹 데이터 파일에도 저장 시도 (실제 서버 환경용)
+                console.log('웹 데이터 저장 완료 (localStorage):', {
+                    themeDataCount: Object.keys(webData.themeData.data || {}).length,
+                    cacheDataCount: webData.cacheData.dataCache.length,
+                    fileName: webData.themeData.fileName
+                });
+                
+                // 🔥 실제 파일로 저장 시도 (다운로드 방식)
                 try {
-                    // 이 부분은 실제 서버 환경에서 구현해야 합니다
-                    // 예: fetch('/api/save-data', { method: 'POST', body: JSON.stringify(webData) })
-                    console.log('웹 데이터 저장 완료 (localStorage):', webData);
+                    await saveToJsonFile(webData);
                 } catch (webError) {
-                    console.log('웹 데이터 파일 저장 실패 (로컬 환경):', webError);
+                    console.log('JSON 파일 저장 실패 (로컬 환경):', webError);
                 }
                 
             } catch (error) {
@@ -951,7 +982,22 @@
             }
         }
 
-        // 🔥 웹 데이터 로드 함수 수정 - localStorage에서 먼저 시도
+        // 🔥 테마 데이터 확인 함수 추가
+        function checkThemeData() {
+            console.log('현재 테마 데이터 상태:', {
+                themeDataCache: themeDataCache ? Object.keys(themeDataCache).length + '개 종목' : '없음',
+                currentThemeFileName: currentThemeFileName,
+                localStorage: localStorage.getItem('webDataBackup') ? '있음' : '없음'
+            });
+            
+            if (themeDataCache) {
+                console.log('테마 데이터 샘플:', Object.entries(themeDataCache).slice(0, 5));
+            }
+            
+            showSuccess('테마 데이터 상태를 콘솔에서 확인하세요!');
+        }
+
+        // 🔥 웹 데이터 로드 함수 개선 - 디버깅 정보 추가
         async function loadWebData() {
             try {
                 // 🔥 먼저 localStorage에서 시도
@@ -959,12 +1005,26 @@
                 if (localData) {
                     console.log('localStorage에서 데이터 로드');
                     webData = JSON.parse(localData);
+                    
+                    // 🔥 디버깅 정보 출력
+                    console.log('로드된 테마 데이터:', {
+                        count: Object.keys(webData.themeData?.data || {}).length,
+                        fileName: webData.themeData?.fileName,
+                        cacheCount: webData.cacheData?.dataCache?.length || 0
+                    });
                 } else {
                     // localStorage에 없으면 웹 파일에서 시도
                     console.log('localStorage에 데이터 없음, 웹 파일에서 시도');
-                    const response = await fetch(WEB_DATA_FILE);
-                    if (response.ok) {
-                        webData = await response.json();
+                    try {
+                        const response = await fetch(WEB_DATA_FILE);
+                        if (response.ok) {
+                            webData = await response.json();
+                            console.log('웹 파일에서 데이터 로드 성공');
+                        } else {
+                            console.log('웹 파일이 없습니다. 기본값 사용');
+                        }
+                    } catch (fetchError) {
+                        console.log('웹 파일 로드 실패:', fetchError);
                     }
                 }
                 
@@ -977,6 +1037,7 @@
                 if (webData.themeData) {
                     themeDataCache = webData.themeData.data || {};
                     currentThemeFileName = webData.themeData.fileName || '';
+                    console.log('테마 데이터 적용:', Object.keys(themeDataCache).length + '개 종목');
                     updateUploadInfo();
                 }
                 
@@ -991,8 +1052,6 @@
                     document.getElementById('baseDateDisplay').textContent = formatDate(baseDate);
                     updateUrlInput();
                 }
-                
-                console.log('웹 데이터 로드 성공:', webData);
                 
             } catch (error) {
                 console.error('웹 데이터 로드 실패:', error);
@@ -1779,8 +1838,6 @@
                             row['날짜'] || row['Date'] || row['date'] || row['거래일'] || 
                             row['기준일'] || row['기준날짜'] || row['등록일'];
                         
-                        console.log(`행 ${index}: 날짜=${date}, 종목명=${stockName}, 테마대=${themeMain}, 테마소=${themeSub}`);
-                        
                         if (stockName && themeMain && themeSub && date) {
                             const cleanStockName = stockName.toString().trim();
                             const cleanDate = date.toString().trim();
@@ -1819,15 +1876,12 @@
                             }
                         } else {
                             skippedCount++;
-                            console.warn(`행 ${index} 건너뜀 - 필수 데이터 없음:`, { date, stockName, themeMain, themeSub });
                         }
                     } catch (rowError) {
                         console.error(`행 ${index} 처리 중 오류:`, rowError);
                         skippedCount++;
                     }
                 });
-                
-                console.log('날짜별 그룹화 데이터:', dateGroupedData);
                 
                 // 🔥 각 종목별로 가장 최신 날짜의 데이터만 선택
                 const newThemeData = {};
@@ -1844,8 +1898,6 @@
                         sub: latestData.themeSub,
                         latestDate: latestData.originalDate
                     };
-                    
-                    console.log(`종목 ${stockName}: 최신 데이터 선택 (${latestData.originalDate}) - ${latestData.themeMain} / ${latestData.themeSub}`);
                 });
                 
                 console.log(`처리 결과: ${Object.keys(newThemeData).length}개 종목, ${validCount}개 행 중 ${skippedCount}개 건너뜀`);
@@ -1862,8 +1914,11 @@
                 updateUploadInfo();
                 showSuccess(`엑셀 파일에서 ${Object.keys(newThemeData).length}개 종목의 테마 데이터를 로드했습니다! (최신 날짜 기준)`);
                 
-                // 🔥 즉시 저장
-                saveWebData();
+                // 🔥 즉시 저장하고 확인
+                saveWebData().then(() => {
+                    console.log('엑셀 데이터 저장 완료');
+                    checkThemeData(); // 저장 후 상태 확인
+                });
 
                 if (dataCache.has(currentId)) {
                     const currentData = dataCache.get(currentId);
@@ -1871,9 +1926,6 @@
                         const updatedData = applyCurrentThemeToData(currentData.data);
                         createTable(updatedData);
                         showSuccess('현재 표시 중인 데이터에 최신 테마 정보가 적용되었습니다!');
-                    } else {
-                        console.error('캐시 데이터가 올바른 형식이 아닙니다:', currentData);
-                        showError('캐시 데이터 형식 오류로 테마를 적용할 수 없습니다.');
                     }
                 }
                 
