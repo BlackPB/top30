@@ -1715,155 +1715,234 @@
             showSuccess('파일을 처리 중입니다...');
         }
 
-        // 🔥 수정된 업로드된 엑셀 파일 파싱 함수
-        function parseUploadedExcel(data, fileName) {
+     // 🔥 수정된 업로드된 엑셀 파일 파싱 함수 - 최근 데이터가 위에 오도록
+function parseUploadedExcel(data, fileName) {
+    try {
+        let jsonData = [];
+        
+        if (fileName.endsWith('.csv')) {
+            jsonData = parseCSVData(data);
+        } else {
+            if (typeof XLSX === 'undefined') {
+                showError('엑셀 파싱 라이브러리를 로드할 수 없습니다.');
+                return;
+            }
+            
+            const workbook = XLSX.read(data, { type: 'binary' });
+            const firstSheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[firstSheetName];
+            
+            // 🔥 다양한 옵션으로 시도
             try {
-                let jsonData = [];
-                
-                if (fileName.endsWith('.csv')) {
-                    jsonData = parseCSVData(data);
-                } else {
-                    if (typeof XLSX === 'undefined') {
-                        showError('엑셀 파싱 라이브러리를 로드할 수 없습니다.');
-                        return;
+                // 첫 번째 시도: 기본 방식
+                jsonData = XLSX.utils.sheet_to_json(worksheet);
+            } catch (e1) {
+                try {
+                    // 두 번째 시도: 헤더 옵션 사용
+                    jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+                    // 헤더 배열을 객체로 변환
+                    if (jsonData.length > 0 && Array.isArray(jsonData[0])) {
+                        const headers = jsonData[0];
+                        jsonData = jsonData.slice(1).map(row => {
+                            const obj = {};
+                            headers.forEach((header, index) => {
+                                if (header && row[index] !== undefined) {
+                                    obj[header] = row[index];
+                                }
+                            });
+                            return obj;
+                        });
                     }
-                    
-                    const workbook = XLSX.read(data, { type: 'binary' });
-                    const firstSheetName = workbook.SheetNames[0];
-                    const worksheet = workbook.Sheets[firstSheetName];
-                    
-                    // 🔥 다양한 옵션으로 시도
+                } catch (e2) {
                     try {
-                        // 첫 번째 시도: 기본 방식
-                        jsonData = XLSX.utils.sheet_to_json(worksheet);
-                    } catch (e1) {
-                        try {
-                            // 두 번째 시도: 헤더 옵션 사용
-                            jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-                            // 헤더 배열을 객체로 변환
-                            if (jsonData.length > 0 && Array.isArray(jsonData[0])) {
-                                const headers = jsonData[0];
-                                jsonData = jsonData.slice(1).map(row => {
-                                    const obj = {};
-                                    headers.forEach((header, index) => {
-                                        if (header && row[index] !== undefined) {
-                                            obj[header] = row[index];
-                                        }
-                                    });
-                                    return obj;
-                                });
-                            }
-                        } catch (e2) {
-                            try {
-                                // 세 번째 시도: raw 데이터 사용
-                                jsonData = XLSX.utils.sheet_to_json(worksheet, { raw: false });
-                            } catch (e3) {
-                                throw new Error(`엑셀 파싱 실패: ${e1.message}, ${e2.message}, ${e3.message}`);
-                            }
-                        }
+                        // 세 번째 시도: raw 데이터 사용
+                        jsonData = XLSX.utils.sheet_to_json(worksheet, { raw: false });
+                    } catch (e3) {
+                        throw new Error(`엑셀 파싱 실패: ${e1.message}, ${e2.message}, ${e3.message}`);
                     }
                 }
-                
-                console.log('파싱된 엑셀 데이터:', jsonData);
-                
-                // 🔥 데이터 유효성 검사 강화
-                if (!jsonData || !Array.isArray(jsonData)) {
-                    throw new Error('엑셀 데이터를 배열로 변환할 수 없습니다.');
-                }
-                
-                if (jsonData.length === 0) {
-                    throw new Error('엑셀 파일에 데이터가 없습니다.');
-                }
-                
-                const newThemeData = {};
-                let validCount = 0;
-                let skippedCount = 0;
-                
-                // 🔥 중요: 엑셀 데이터를 역순으로 처리 (최신 데이터가 위에 있으므로)
-                const reversedData = [...jsonData].reverse();
-                
-                reversedData.forEach((row, index) => {
-                    try {
-                        // 🔥 다양한 컬럼명 패턴 시도
-                        const stockName = 
-                            row['종목명'] || row['종목'] || row['Stock Name'] || row['Stock'] || 
-                            row['stock'] || row['name'] || row['Name'] || row['종목명칭'] ||
-                            row['기업명'] || row['회사명'] || row['company'] || row['Company'];
-                        
-                        const themeMain = 
-                            row['테마(대)'] || row['테마대'] || row['대테마'] || row['Main Theme'] || 
-                            row['main'] || row['테마'] || row['Theme'] || row['대분류'] ||
-                            row['주요테마'] || row['primary_theme'] || row['테마 대'];
-                        
-                        const themeSub = 
-                            row['테마(소)'] || row['테마소'] || row['소테마'] || row['Sub Theme'] || 
-                            row['sub'] || row['세부테마'] || row['sub_theme'] || row['소분류'] ||
-                            row['상세테마'] || row['테마 소'];
-                        
-                        console.log(`행 ${index}: 종목명=${stockName}, 테마대=${themeMain}, 테마소=${themeSub}`);
-                        
-                        if (stockName && themeMain && themeSub) {
-                            const cleanStockName = stockName.toString().trim();
-                            
-                            if (cleanStockName) {
-                                // 🔥 동일 종목이 여러 번 나오는 경우, 가장 최근 데이터(역순 처리로 인해 마지막에 처리되는 데이터)가 유지됨
-                                newThemeData[cleanStockName] = {
-                                    main: themeMain.toString().trim(),
-                                    sub: themeSub.toString().trim()
-                                };
-                                validCount++;
-                            } else {
-                                skippedCount++;
-                            }
-                        } else {
-                            skippedCount++;
-                            console.warn(`행 ${index} 건너뜀 - 필수 데이터 없음:`, { stockName, themeMain, themeSub });
-                        }
-                    } catch (rowError) {
-                        console.error(`행 ${index} 처리 중 오류:`, rowError);
-                        skippedCount++;
-                    }
-                });
-                
-                console.log(`처리 결과: ${validCount}개 유효, ${skippedCount}개 건너뜀`);
-                
-                if (validCount === 0) {
-                    // 🔥 사용자에게 컬럼 구조를 보여주는 도움말
-                    const sampleRow = jsonData[0];
-                    const availableColumns = sampleRow ? Object.keys(sampleRow) : ['데이터 없음'];
-                    throw new Error(`유효한 데이터를 찾을 수 없습니다. \n사용 가능한 컬럼: ${availableColumns.join(', ')}\n필요한 컬럼: 종목명, 테마(대), 테마(소)`);
-                }
-                
-                themeDataCache = newThemeData;
-                currentThemeFileName = fileName;
-                
-                // 🔥 업로드 정보 업데이트 호출
-                updateUploadInfo();
-                showSuccess(`엑셀 파일에서 ${validCount}개 종목의 테마 데이터를 로드했습니다! (${skippedCount}개 건너뜀, 최신 데이터 우선)`);
-                
-                // 🔥 웹 데이터 저장
-                saveWebData();
-
-                // 🔥 현재 표시 중인 데이터에 즉시 테마 데이터 적용
-                // 🔥 중요: createTable에 올바른 배열 데이터 전달
-                if (dataCache.has(currentId)) {
-                    const currentData = dataCache.get(currentId);
-                    // 🔥 currentData.data가 배열인지 확인
-                    if (currentData && Array.isArray(currentData.data)) {
-                        const updatedData = applyCurrentThemeToData(currentData.data);
-                        createTable(updatedData);
-                        showSuccess('현재 표시 중인 데이터에 테마 정보가 적용되었습니다!');
-                    } else {
-                        console.error('캐시 데이터가 올바른 형식이 아닙니다:', currentData);
-                        showError('캐시 데이터 형식 오류로 테마를 적용할 수 없습니다.');
-                    }
-                }
-                
-            } catch (error) {
-                console.error('엑셀 파일 파싱 실패:', error);
-                showError('엑셀 파일 파싱 실패: ' + error.message);
             }
         }
+        
+        console.log('파싱된 엑셀 데이터:', jsonData);
+        
+        // 🔥 데이터 유효성 검사 강화
+        if (!jsonData || !Array.isArray(jsonData)) {
+            throw new Error('엑셀 데이터를 배열로 변환할 수 없습니다.');
+        }
+        
+        if (jsonData.length === 0) {
+            throw new Error('엑셀 파일에 데이터가 없습니다.');
+        }
+        
+        const newThemeData = {};
+        let validCount = 0;
+        let skippedCount = 0;
+        
+        // 🔥 중요: 엑셀 데이터를 정방향으로 처리 (최신 데이터가 위에 있으므로)
+        // 원본 순서를 유지하면서 중복된 경우 나중에 나온 데이터(더 아래 있는 데이터)를 덮어씀
+        jsonData.forEach((row, index) => {
+            try {
+                // 🔥 다양한 컬럼명 패턴 시도
+                const stockName = 
+                    row['종목명'] || row['종목'] || row['Stock Name'] || row['Stock'] || 
+                    row['stock'] || row['name'] || row['Name'] || row['종목명칭'] ||
+                    row['기업명'] || row['회사명'] || row['company'] || row['Company'];
+                
+                const themeMain = 
+                    row['테마(대)'] || row['테마대'] || row['대테마'] || row['Main Theme'] || 
+                    row['main'] || row['테마'] || row['Theme'] || row['대분류'] ||
+                    row['주요테마'] || row['primary_theme'] || row['테마 대'];
+                
+                const themeSub = 
+                    row['테마(소)'] || row['테마소'] || row['소테마'] || row['Sub Theme'] || 
+                    row['sub'] || row['세부테마'] || row['sub_theme'] || row['소분류'] ||
+                    row['상세테마'] || row['테마 소'];
+                
+                console.log(`행 ${index}: 종목명=${stockName}, 테마대=${themeMain}, 테마소=${themeSub}`);
+                
+                if (stockName && themeMain && themeSub) {
+                    const cleanStockName = stockName.toString().trim();
+                    
+                    if (cleanStockName) {
+                        // 🔥 동일 종목이 여러 번 나오는 경우, 가장 최근 데이터(더 아래 있는 데이터)가 유지됨
+                        // 엑셀에서 아래쪽 행이 더 최신 데이터이므로 나중에 처리되는 데이터가 우선 적용됨
+                        newThemeData[cleanStockName] = {
+                            main: themeMain.toString().trim(),
+                            sub: themeSub.toString().trim()
+                        };
+                        validCount++;
+                    } else {
+                        skippedCount++;
+                    }
+                } else {
+                    skippedCount++;
+                    console.warn(`행 ${index} 건너뜀 - 필수 데이터 없음:`, { stockName, themeMain, themeSub });
+                }
+            } catch (rowError) {
+                console.error(`행 ${index} 처리 중 오류:`, rowError);
+                skippedCount++;
+            }
+        });
+        
+        console.log(`처리 결과: ${validCount}개 유효, ${skippedCount}개 건너뜀`);
+        
+        if (validCount === 0) {
+            // 🔥 사용자에게 컬럼 구조를 보여주는 도움말
+            const sampleRow = jsonData[0];
+            const availableColumns = sampleRow ? Object.keys(sampleRow) : ['데이터 없음'];
+            throw new Error(`유효한 데이터를 찾을 수 없습니다. \n사용 가능한 컬럼: ${availableColumns.join(', ')}\n필요한 컬럼: 종목명, 테마(대), 테마(소)`);
+        }
+        
+        themeDataCache = newThemeData;
+        currentThemeFileName = fileName;
+        
+        // 🔥 업로드 정보 업데이트 호출
+        updateUploadInfo();
+        showSuccess(`엑셀 파일에서 ${validCount}개 종목의 테마 데이터를 로드했습니다! (${skippedCount}개 건너뜀, 최신 데이터 우선)`);
+        
+        // 🔥 웹 데이터 저장
+        saveWebData();
+
+        // 🔥 현재 표시 중인 데이터에 즉시 테마 데이터 적용
+        if (dataCache.has(currentId)) {
+            const currentData = dataCache.get(currentId);
+            // 🔥 currentData.data가 배열인지 확인
+            if (currentData && Array.isArray(currentData.data)) {
+                const updatedData = applyCurrentThemeToData(currentData.data);
+                createTable(updatedData);
+                showSuccess('현재 표시 중인 데이터에 테마 정보가 적용되었습니다!');
+            } else {
+                console.error('캐시 데이터가 올바른 형식이 아닙니다:', currentData);
+                showError('캐시 데이터 형식 오류로 테마를 적용할 수 없습니다.');
+            }
+        }
+        
+    } catch (error) {
+        console.error('엑셀 파일 파싱 실패:', error);
+        showError('엑셀 파일 파싱 실패: ' + error.message);
+    }
+}
+
+// 🔥 수정된 CSV 데이터 파싱 함수 - 최신 데이터가 위에 오도록
+function parseCSVData(csvText) {
+    try {
+        const lines = csvText.split('\n').filter(line => line.trim() !== '');
+        
+        if (lines.length === 0) {
+            throw new Error('CSV 파일이 비어있습니다.');
+        }
+        
+        // 🔥 다양한 구분자 시도
+        let delimiter = ',';
+        const firstLine = lines[0];
+        
+        // 구분자 감지
+        if (firstLine.includes('\t')) {
+            delimiter = '\t';
+        } else if (firstLine.includes(';')) {
+            delimiter = ';';
+        } else if (firstLine.includes('|')) {
+            delimiter = '|';
+        }
+        
+        console.log(`CSV 구분자 감지: "${delimiter}"`);
+        
+        const headers = firstLine.split(delimiter).map(header => 
+            header.trim().replace(/^"|"$/g, '').replace(/\s+/g, ' ')
+        );
+        
+        const result = [];
+        
+        // 🔥 CSV 데이터를 정방향으로 처리 (첫 번째 행이 헤더, 두 번째 행부터 데이터)
+        for (let i = 1; i < lines.length; i++) {
+            const line = lines[i].trim();
+            if (!line) continue;
+            
+            // 🔥 CSV 값 파싱 개선 (쉼표 내부의 따옴표 처리)
+            const values = [];
+            let currentValue = '';
+            let inQuotes = false;
+            
+            for (let j = 0; j < line.length; j++) {
+                const char = line[j];
+                
+                if (char === '"') {
+                    inQuotes = !inQuotes;
+                } else if (char === delimiter && !inQuotes) {
+                    values.push(currentValue.trim().replace(/^"|"$/g, ''));
+                    currentValue = '';
+                } else {
+                    currentValue += char;
+                }
+            }
+            
+            // 마지막 값 추가
+            values.push(currentValue.trim().replace(/^"|"$/g, ''));
+            
+            const row = {};
+            let hasData = false;
+            
+            headers.forEach((header, index) => {
+                if (values[index] && values[index] !== '') {
+                    row[header] = values[index];
+                    hasData = true;
+                }
+            });
+            
+            if (hasData) {
+                result.push(row);
+            }
+        }
+        
+        console.log('CSV 파싱 결과:', result);
+        return result;
+        
+    } catch (error) {
+        console.error('CSV 파싱 오류:', error);
+        throw new Error('CSV 파일 파싱 실패: ' + error.message);
+    }
+}
 
         // 🔥 수정된 CSV 데이터 파싱 함수
         function parseCSVData(csvText) {
