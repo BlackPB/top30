@@ -1633,315 +1633,321 @@
             showSuccess('파일을 처리 중입니다...');
         }
 
-        // 🔥 수정된 업로드된 엑셀 파일 파싱 함수 - 최신 데이터가 위에 오도록
-        function parseUploadedExcel(data, fileName) {
+       // 🔥 수정된 업로드된 엑셀 파일 파싱 함수 - 날짜 기반으로 최신 데이터 적용
+function parseUploadedExcel(data, fileName) {
+    try {
+        let jsonData = [];
+        
+        if (fileName.endsWith('.csv')) {
+            jsonData = parseCSVData(data);
+        } else {
+            if (typeof XLSX === 'undefined') {
+                showError('엑셀 파싱 라이브러리를 로드할 수 없습니다.');
+                return;
+            }
+            
+            const workbook = XLSX.read(data, { type: 'binary' });
+            const firstSheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[firstSheetName];
+            
             try {
-                let jsonData = [];
-                
-                if (fileName.endsWith('.csv')) {
-                    jsonData = parseCSVData(data);
-                } else {
-                    if (typeof XLSX === 'undefined') {
-                        showError('엑셀 파싱 라이브러리를 로드할 수 없습니다.');
-                        return;
+                jsonData = XLSX.utils.sheet_to_json(worksheet);
+            } catch (e1) {
+                try {
+                    jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+                    if (jsonData.length > 0 && Array.isArray(jsonData[0])) {
+                        const headers = jsonData[0];
+                        jsonData = jsonData.slice(1).map(row => {
+                            const obj = {};
+                            headers.forEach((header, index) => {
+                                if (header && row[index] !== undefined) {
+                                    obj[header] = row[index];
+                                }
+                            });
+                            return obj;
+                        });
                     }
-                    
-                    const workbook = XLSX.read(data, { type: 'binary' });
-                    const firstSheetName = workbook.SheetNames[0];
-                    const worksheet = workbook.Sheets[firstSheetName];
-                    
+                } catch (e2) {
                     try {
-                        jsonData = XLSX.utils.sheet_to_json(worksheet);
-                    } catch (e1) {
+                        jsonData = XLSX.utils.sheet_to_json(worksheet, { raw: false });
+                    } catch (e3) {
+                        throw new Error(`엑셀 파싱 실패: ${e1.message}, ${e2.message}, ${e3.message}`);
+                    }
+                }
+            }
+        }
+        
+        console.log('파싱된 엑셀 데이터:', jsonData);
+        
+        if (!jsonData || !Array.isArray(jsonData)) {
+            throw new Error('엑셀 데이터를 배열로 변환할 수 없습니다.');
+        }
+        
+        if (jsonData.length === 0) {
+            throw new Error('엑셀 파일에 데이터가 없습니다.');
+        }
+        
+        // 🔥 날짜별로 그룹화하고 최신 날짜의 데이터만 사용
+        const dateGroupedData = {};
+        let validCount = 0;
+        let skippedCount = 0;
+        
+        jsonData.forEach((row, index) => {
+            try {
+                // 🔥 다양한 컬럼명 패턴 시도 (날짜 포함)
+                const stockName = 
+                    row['종목명'] || row['종목'] || row['Stock Name'] || row['Stock'] || 
+                    row['stock'] || row['name'] || row['Name'] || row['종목명칭'] ||
+                    row['기업명'] || row['회사명'] || row['company'] || row['Company'];
+                
+                const themeMain = 
+                    row['테마(대)'] || row['테마대'] || row['대테마'] || row['Main Theme'] || 
+                    row['main'] || row['테마'] || row['Theme'] || row['대분류'] ||
+                    row['주요테마'] || row['primary_theme'] || row['테마 대'];
+                
+                const themeSub = 
+                    row['테마(소)'] || row['테마소'] || row['소테마'] || row['Sub Theme'] || 
+                    row['sub'] || row['세부테마'] || row['sub_theme'] || row['소분류'] ||
+                    row['상세테마'] || row['테마 소'];
+                
+                // 🔥 날짜 컬럼 추가
+                const date = 
+                    row['날짜'] || row['Date'] || row['date'] || row['거래일'] || 
+                    row['기준일'] || row['기준날짜'] || row['등록일'];
+                
+                console.log(`행 ${index}: 날짜=${date}, 종목명=${stockName}, 테마대=${themeMain}, 테마소=${themeSub}`);
+                
+                if (stockName && themeMain && themeSub && date) {
+                    const cleanStockName = stockName.toString().trim();
+                    const cleanDate = date.toString().trim();
+                    
+                    if (cleanStockName && cleanDate) {
+                        // 🔥 날짜를 Date 객체로 변환
+                        let dateObj;
                         try {
-                            jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-                            if (jsonData.length > 0 && Array.isArray(jsonData[0])) {
-                                const headers = jsonData[0];
-                                jsonData = jsonData.slice(1).map(row => {
-                                    const obj = {};
-                                    headers.forEach((header, index) => {
-                                        if (header && row[index] !== undefined) {
-                                            obj[header] = row[index];
-                                        }
-                                    });
-                                    return obj;
-                                });
-                            }
-                        } catch (e2) {
-                            try {
-                                jsonData = XLSX.utils.sheet_to_json(worksheet, { raw: false });
-                            } catch (e3) {
-                                throw new Error(`엑셀 파싱 실패: ${e1.message}, ${e2.message}, ${e3.message}`);
-                            }
-                        }
-                    }
-                }
-                
-                console.log('파싱된 엑셀 데이터:', jsonData);
-                
-                if (!jsonData || !Array.isArray(jsonData)) {
-                    throw new Error('엑셀 데이터를 배열로 변환할 수 없습니다.');
-                }
-                
-                if (jsonData.length === 0) {
-                    throw new Error('엑셀 파일에 데이터가 없습니다.');
-                }
-                
-                const newThemeData = {};
-                let validCount = 0;
-                let skippedCount = 0;
-                
-                // 🔥 중요: 엑셀 데이터를 정방향으로 처리 (최신 데이터가 위에 있으므로)
-                jsonData.forEach((row, index) => {
-                    try {
-                        const stockName = 
-                            row['종목명'] || row['종목'] || row['Stock Name'] || row['Stock'] || 
-                            row['stock'] || row['name'] || row['Name'] || row['종목명칭'] ||
-                            row['기업명'] || row['회사명'] || row['company'] || row['Company'];
-                        
-                        const themeMain = 
-                            row['테마(대)'] || row['테마대'] || row['대테마'] || row['Main Theme'] || 
-                            row['main'] || row['테마'] || row['Theme'] || row['대분류'] ||
-                            row['주요테마'] || row['primary_theme'] || row['테마 대'];
-                        
-                        const themeSub = 
-                            row['테마(소)'] || row['테마소'] || row['소테마'] || row['Sub Theme'] || 
-                            row['sub'] || row['세부테마'] || row['sub_theme'] || row['소분류'] ||
-                            row['상세테마'] || row['테마 소'];
-                        
-                        console.log(`행 ${index}: 종목명=${stockName}, 테마대=${themeMain}, 테마소=${themeSub}`);
-                        
-                        if (stockName && themeMain && themeSub) {
-                            const cleanStockName = stockName.toString().trim();
-                            
-                            if (cleanStockName) {
-                                // 🔥 동일 종목이 여러 번 나오는 경우, 가장 최근 데이터(더 아래 있는 데이터)가 유지됨
-                                newThemeData[cleanStockName] = {
-                                    main: themeMain.toString().trim(),
-                                    sub: themeSub.toString().trim()
-                                };
-                                validCount++;
+                            // 다양한 날짜 형식 지원
+                            if (cleanDate.includes('-')) {
+                                dateObj = new Date(cleanDate);
+                            } else if (cleanDate.includes('.')) {
+                                dateObj = new Date(cleanDate.replace(/\./g, '-'));
                             } else {
-                                skippedCount++;
+                                dateObj = new Date(cleanDate);
                             }
-                        } else {
-                            skippedCount++;
-                            console.warn(`행 ${index} 건너뜀 - 필수 데이터 없음:`, { stockName, themeMain, themeSub });
+                        } catch (e) {
+                            console.warn(`날짜 파싱 실패: ${cleanDate}`, e);
+                            dateObj = new Date(); // 실패시 현재 날짜 사용
                         }
-                    } catch (rowError) {
-                        console.error(`행 ${index} 처리 중 오류:`, rowError);
+                        
+                        if (!dateGroupedData[cleanStockName]) {
+                            dateGroupedData[cleanStockName] = [];
+                        }
+                        
+                        dateGroupedData[cleanStockName].push({
+                            date: dateObj,
+                            themeMain: themeMain.toString().trim(),
+                            themeSub: themeSub.toString().trim(),
+                            originalDate: cleanDate
+                        });
+                        
+                        validCount++;
+                    } else {
                         skippedCount++;
                     }
-                });
-                
-                console.log(`처리 결과: ${validCount}개 유효, ${skippedCount}개 건너뜀`);
-                
-                if (validCount === 0) {
-                    const sampleRow = jsonData[0];
-                    const availableColumns = sampleRow ? Object.keys(sampleRow) : ['데이터 없음'];
-                    throw new Error(`유효한 데이터를 찾을 수 없습니다. \n사용 가능한 컬럼: ${availableColumns.join(', ')}\n필요한 컬럼: 종목명, 테마(대), 테마(소)`);
+                } else {
+                    skippedCount++;
+                    console.warn(`행 ${index} 건너뜀 - 필수 데이터 없음:`, { date, stockName, themeMain, themeSub });
                 }
-                
-                themeDataCache = newThemeData;
-                currentThemeFileName = fileName;
-                
-                updateUploadInfo();
-                showSuccess(`엑셀 파일에서 ${validCount}개 종목의 테마 데이터를 로드했습니다! (${skippedCount}개 건너뜀, 최신 데이터 우선)`);
-                
-                saveWebData();
+            } catch (rowError) {
+                console.error(`행 ${index} 처리 중 오류:`, rowError);
+                skippedCount++;
+            }
+        });
+        
+        console.log('날짜별 그룹화 데이터:', dateGroupedData);
+        
+        // 🔥 각 종목별로 가장 최신 날짜의 데이터만 선택
+        const newThemeData = {};
+        Object.keys(dateGroupedData).forEach(stockName => {
+            const stockData = dateGroupedData[stockName];
+            
+            // 날짜 기준으로 정렬 (최신 날짜가 먼저 오도록)
+            stockData.sort((a, b) => b.date - a.date);
+            
+            // 가장 최신 데이터 선택
+            const latestData = stockData[0];
+            newThemeData[stockName] = {
+                main: latestData.themeMain,
+                sub: latestData.themeSub,
+                latestDate: latestData.originalDate
+            };
+            
+            console.log(`종목 ${stockName}: 최신 데이터 선택 (${latestData.originalDate}) - ${latestData.themeMain} / ${latestData.themeSub}`);
+        });
+        
+        console.log(`처리 결과: ${Object.keys(newThemeData).length}개 종목, ${validCount}개 행 중 ${skippedCount}개 건너뜀`);
+        
+        if (Object.keys(newThemeData).length === 0) {
+            const sampleRow = jsonData[0];
+            const availableColumns = sampleRow ? Object.keys(sampleRow) : ['데이터 없음'];
+            throw new Error(`유효한 데이터를 찾을 수 없습니다. \n사용 가능한 컬럼: ${availableColumns.join(', ')}\n필요한 컬럼: 날짜, 종목명, 테마(대), 테마(소)`);
+        }
+        
+        themeDataCache = newThemeData;
+        currentThemeFileName = fileName;
+        
+        updateUploadInfo();
+        showSuccess(`엑셀 파일에서 ${Object.keys(newThemeData).length}개 종목의 테마 데이터를 로드했습니다! (최신 날짜 기준)`);
+        
+        saveWebData();
 
-                if (dataCache.has(currentId)) {
-                    const currentData = dataCache.get(currentId);
-                    if (currentData && Array.isArray(currentData.data)) {
-                        const updatedData = applyCurrentThemeToData(currentData.data);
-                        createTable(updatedData);
-                        showSuccess('현재 표시 중인 데이터에 테마 정보가 적용되었습니다!');
-                    } else {
-                        console.error('캐시 데이터가 올바른 형식이 아닙니다:', currentData);
-                        showError('캐시 데이터 형식 오류로 테마를 적용할 수 없습니다.');
-                    }
-                }
-                
-            } catch (error) {
-                console.error('엑셀 파일 파싱 실패:', error);
-                showError('엑셀 파일 파싱 실패: ' + error.message);
+        if (dataCache.has(currentId)) {
+            const currentData = dataCache.get(currentId);
+            if (currentData && Array.isArray(currentData.data)) {
+                const updatedData = applyCurrentThemeToData(currentData.data);
+                createTable(updatedData);
+                showSuccess('현재 표시 중인 데이터에 최신 테마 정보가 적용되었습니다!');
+            } else {
+                console.error('캐시 데이터가 올바른 형식이 아닙니다:', currentData);
+                showError('캐시 데이터 형식 오류로 테마를 적용할 수 없습니다.');
             }
         }
+        
+    } catch (error) {
+        console.error('엑셀 파일 파싱 실패:', error);
+        showError('엑셀 파일 파싱 실패: ' + error.message);
+    }
+}
 
-        // 🔥 수정된 CSV 데이터 파싱 함수
-        function parseCSVData(csvText) {
-            try {
-                const lines = csvText.split('\n').filter(line => line.trim() !== '');
+// 🔥 수정된 CSV 데이터 파싱 함수 - 날짜 컬럼 지원
+function parseCSVData(csvText) {
+    try {
+        const lines = csvText.split('\n').filter(line => line.trim() !== '');
+        
+        if (lines.length === 0) {
+            throw new Error('CSV 파일이 비어있습니다.');
+        }
+        
+        let delimiter = ',';
+        const firstLine = lines[0];
+        
+        if (firstLine.includes('\t')) {
+            delimiter = '\t';
+        } else if (firstLine.includes(';')) {
+            delimiter = ';';
+        } else if (firstLine.includes('|')) {
+            delimiter = '|';
+        }
+        
+        console.log(`CSV 구분자 감지: "${delimiter}"`);
+        
+        const headers = firstLine.split(delimiter).map(header => 
+            header.trim().replace(/^"|"$/g, '').replace(/\s+/g, ' ')
+        );
+        
+        const result = [];
+        
+        for (let i = 1; i < lines.length; i++) {
+            const line = lines[i].trim();
+            if (!line) continue;
+            
+            const values = [];
+            let currentValue = '';
+            let inQuotes = false;
+            
+            for (let j = 0; j < line.length; j++) {
+                const char = line[j];
                 
-                if (lines.length === 0) {
-                    throw new Error('CSV 파일이 비어있습니다.');
-                }
-                
-                let delimiter = ',';
-                const firstLine = lines[0];
-                
-                if (firstLine.includes('\t')) {
-                    delimiter = '\t';
-                } else if (firstLine.includes(';')) {
-                    delimiter = ';';
-                } else if (firstLine.includes('|')) {
-                    delimiter = '|';
-                }
-                
-                console.log(`CSV 구분자 감지: "${delimiter}"`);
-                
-                const headers = firstLine.split(delimiter).map(header => 
-                    header.trim().replace(/^"|"$/g, '').replace(/\s+/g, ' ')
-                );
-                
-                const result = [];
-                
-                for (let i = 1; i < lines.length; i++) {
-                    const line = lines[i].trim();
-                    if (!line) continue;
-                    
-                    const values = [];
-                    let currentValue = '';
-                    let inQuotes = false;
-                    
-                    for (let j = 0; j < line.length; j++) {
-                        const char = line[j];
-                        
-                        if (char === '"') {
-                            inQuotes = !inQuotes;
-                        } else if (char === delimiter && !inQuotes) {
-                            values.push(currentValue.trim().replace(/^"|"$/g, ''));
-                            currentValue = '';
-                        } else {
-                            currentValue += char;
-                        }
-                    }
-                    
+                if (char === '"') {
+                    inQuotes = !inQuotes;
+                } else if (char === delimiter && !inQuotes) {
                     values.push(currentValue.trim().replace(/^"|"$/g, ''));
-                    
-                    const row = {};
-                    let hasData = false;
-                    
-                    headers.forEach((header, index) => {
-                        if (values[index] && values[index] !== '') {
-                            row[header] = values[index];
-                            hasData = true;
-                        }
-                    });
-                    
-                    if (hasData) {
-                        result.push(row);
-                    }
+                    currentValue = '';
+                } else {
+                    currentValue += char;
                 }
-                
-                console.log('CSV 파싱 결과:', result);
-                return result;
-                
-            } catch (error) {
-                console.error('CSV 파싱 오류:', error);
-                throw new Error('CSV 파일 파싱 실패: ' + error.message);
             }
-        }
-
-        // 🔥 테마 데이터 초기화 함수
-        function clearThemeData() {
-            if (!confirm('저장된 테마 데이터를 초기화하시겠습니까?\n엑셀에서 업로드한 모든 테마 정보가 삭제됩니다.')) {
-                return;
-            }
-
-            try {
-                themeDataCache = {};
-                currentThemeFileName = '';
-                loadThemeData();
-                saveWebData();
-                
-                if (dataCache.has(currentId)) {
-                    const currentData = dataCache.get(currentId);
-                    if (currentData && Array.isArray(currentData.data)) {
-                        createTable(currentData.data);
-                    }
+            
+            values.push(currentValue.trim().replace(/^"|"$/g, ''));
+            
+            const row = {};
+            let hasData = false;
+            
+            headers.forEach((header, index) => {
+                if (values[index] && values[index] !== '') {
+                    row[header] = values[index];
+                    hasData = true;
                 }
-                
-                showSuccess('테마 데이터가 초기화되었습니다. 기본 테마 데이터로 돌아갑니다.');
-                
-            } catch (error) {
-                console.error('테마 데이터 초기화 오류:', error);
-                showError('테마 데이터 초기화 중 오류가 발생했습니다: ' + error.message);
-            }
-        }
-
-        // 🔥 createTable 함수 - 6열 구조로 수정
-        function createTable(data) {
-            if (!data) {
-                showError('표시할 데이터가 없습니다.');
-                return;
-            }
-            
-            if (!Array.isArray(data)) {
-                console.error('createTable에 배열이 아닌 데이터가 전달됨:', data);
-                showError('데이터 형식이 올바르지 않습니다.');
-                return;
-            }
-            
-            if (data.length === 0) {
-                showError('표시할 데이터가 없습니다.');
-                return;
-            }
-            
-            let html = `
-                <table>
-                    <thead>
-                        <tr>
-                            <th class="theme-main-col">테마(대)</th>
-                            <th class="theme-sub-col">테마(소)</th>
-                            <th class="date-col">날짜</th>
-                            <th class="stock-name-col">종목명</th>
-                            <th class="rise-rate-col">상승률</th>
-                            <th class="reason-col">상승이유</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-            `;
-            
-            data.forEach(item => {
-                if (!item) return;
-                
-                html += `
-                    <tr>
-                        <td class="theme-main-col"><span class="theme-main" title="${item.themeMain || ''}">${item.themeMain || ''}</span></td>
-                        <td class="theme-sub-col"><span class="theme-sub" title="${item.themeSub || ''}">${item.themeSub || ''}</span></td>
-                        <td class="date-col date">${item.date || ''}</td>
-                        <td class="stock-name-col stock-name">${item.stockName || ''}</td>
-                        <td class="rise-rate-col rise-rate">${item.riseRate || ''}</td>
-                        <td class="reason-col reason">${item.reason || ''}</td>
-                    </tr>
-                `;
             });
             
-            html += `
-                    </tbody>
-                </table>
-            `;
-            
-            document.getElementById('tableContainer').innerHTML = html;
-        }
-
-        // 엑셀에서 테마 정보 가져오기
-        async function getThemeFromExcel(stockName, date) {
-            try {
-                const cleanStockName = stockName.replace(/^\d+\.\s*/, '').trim();
-                
-                if (themeDataCache && themeDataCache[cleanStockName]) {
-                    return themeDataCache[cleanStockName];
-                }
-                
-                return { main: '기타', sub: '기타' };
-                
-            } catch (error) {
-                console.error('테마 데이터 조회 실패:', error);
-                return { main: '데이터없음', sub: '데이터없음' };
+            if (hasData) {
+                result.push(row);
             }
         }
+        
+        console.log('CSV 파싱 결과:', result);
+        return result;
+        
+    } catch (error) {
+        console.error('CSV 파싱 오류:', error);
+        throw new Error('CSV 파일 파싱 실패: ' + error.message);
+    }
+}
+
+// 🔥 업로드 정보 업데이트 함수 수정 - 날짜 정보 표시
+function updateUploadInfo() {
+    const uploadInfo = document.getElementById('uploadInfo');
+    if (themeDataCache && Object.keys(themeDataCache).length > 0) {
+        // 가장 최신 날짜 찾기
+        let latestDate = null;
+        Object.values(themeDataCache).forEach(data => {
+            if (data.latestDate) {
+                const date = new Date(data.latestDate.replace(/\./g, '-'));
+                if (!latestDate || date > latestDate) {
+                    latestDate = date;
+                }
+            }
+        });
+        
+        const latestDateStr = latestDate ? formatDate(latestDate) : '정보 없음';
+        
+        uploadInfo.innerHTML = `
+            <strong>현재 테마 데이터:</strong> ${currentThemeFileName}<br>
+            <strong>로드된 종목 수:</strong> ${Object.keys(themeDataCache).length}개<br>
+            <strong>가장 최신 데이터 날짜:</strong> ${latestDateStr}
+        `;
+        uploadInfo.style.display = 'block';
+    } else {
+        uploadInfo.innerHTML = `
+            <strong>현재 테마 데이터:</strong> 데이터 없음<br>
+            <strong>로드된 종목 수:</strong> 0개<br>
+            <strong>가장 최신 데이터 날짜:</strong> 정보 없음
+        `;
+        uploadInfo.style.display = 'block';
+    }
+}
+
+// 🔥 테마 데이터에서 특정 종목의 정보를 가져오는 함수 수정
+async function getThemeFromExcel(stockName, date) {
+    try {
+        const cleanStockName = stockName.replace(/^\d+\.\s*/, '').trim();
+        
+        if (themeDataCache && themeDataCache[cleanStockName]) {
+            const themeData = themeDataCache[cleanStockName];
+            console.log(`테마 데이터 적용: ${cleanStockName} -> ${themeData.main} / ${themeData.sub} (날짜: ${themeData.latestDate})`);
+            return {
+                main: themeData.main,
+                sub: themeData.sub
+            };
+        }
+        
+        console.log(`테마 데이터 없음: ${cleanStockName}`);
+        return { main: '기타', sub: '기타' };
+        
+    } catch (error) {
+        console.error('테마 데이터 조회 실패:', error);
+        return { main: '데이터없음', sub: '데이터없음' };
+    }
+}
 
         // 공휴일 API 호출 함수
         async function fetchHolidaysFromAPI(year) {
