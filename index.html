@@ -858,6 +858,23 @@
             }
         };
 
+        // 🔥 기본 데이터 초기화 함수 추가
+        function initializeDefaultData() {
+            console.log('기본 데이터로 초기화');
+            themeDataCache = {
+                '삼성전자': { main: '반도체', sub: '메모리반도체' },
+                'SK하이닉스': { main: '반도체', sub: '메모리반도체' },
+                '현대차': { main: '자동차', sub: '완성차' },
+                '기아': { main: '자동차', sub: '완성차' },
+                'LG에너지솔루션': { main: '2차전지', sub: '배터리' },
+                'POSCO홀딩스': { main: '철강', sub: '제철' },
+                'NAVER': { main: '인터넷', sub: '플랫폼' },
+                '카카오': { main: '인터넷', sub: '플랫폼' }
+            };
+            currentThemeFileName = '기본 데이터';
+            updateUploadInfo();
+        }
+
         // 🔥 현재 시간에 따라 자동으로 날짜 결정하는 함수
         function getTargetDateByCurrentTime() {
             const now = new Date();
@@ -893,90 +910,7 @@
             return targetDate;
         }
 
-        // 🔥 초기화 함수
-        async function initialize() {
-            loadBaseSettings();
-            
-            await loadWebData();
-            
-            const targetDate = getTargetDateByCurrentTime();
-            const tradingDate = await findLatestTradingDay(targetDate);
-            
-            currentId = await getTradingDayIdFromDate(tradingDate);
-            
-            updateUrlInput();
-            await updateDateDisplay();
-            
-            await loadHolidaysForYear(2025);
-            await loadHolidaysForYear(2026);
-            
-            await loadThemeData();
-            
-            updateCacheInfo();
-            
-            fetchData();
-            
-            document.addEventListener('click', function(event) {
-                const calendar = document.getElementById('calendar');
-                const currentDate = document.getElementById('currentDate');
-                const settingsCalendar = document.getElementById('settingsCalendar');
-                const baseDateDisplay = document.getElementById('baseDateDisplay');
-                
-                if (calendarVisible && 
-                    !calendar.contains(event.target) && 
-                    !currentDate.contains(event.target)) {
-                    hideCalendar();
-                }
-                
-                if (settingsCalendarVisible && 
-                    !settingsCalendar.contains(event.target) && 
-                    !baseDateDisplay.contains(event.target)) {
-                    hideSettingsCalendar();
-                }
-            });
-        }
-
-        // 🔥 웹 데이터 로드 함수
-        async function loadWebData() {
-            try {
-                const response = await fetch(WEB_DATA_FILE);
-                if (response.ok) {
-                    webData = await response.json();
-                    
-                    if (webData.cacheData) {
-                        dataCache = new Map(webData.cacheData.dataCache || []);
-                        dateToIdCache = new Map(webData.cacheData.dateToIdCache || []);
-                        dateIdCache = new Map(webData.cacheData.dateIdCache || []);
-                    }
-                    
-                    if (webData.themeData) {
-                        themeDataCache = webData.themeData.data || {};
-                        currentThemeFileName = webData.themeData.fileName || '';
-                        updateUploadInfo();
-                    }
-                    
-                    if (webData.baseSettings) {
-                        baseUrl = webData.baseSettings.baseUrl || baseUrl;
-                        baseId = webData.baseSettings.baseId || baseId;
-                        baseDate = new Date(webData.baseSettings.baseDate || baseDate);
-                        currentId = webData.currentState?.currentId || baseId;
-                        
-                        document.getElementById('baseUrlInput').value = baseUrl;
-                        document.getElementById('baseIdInput').value = baseId;
-                        document.getElementById('baseDateDisplay').textContent = formatDate(baseDate);
-                        updateUrlInput();
-                    }
-                    
-                    console.log('웹 데이터 로드 성공:', webData);
-                } else {
-                    console.log('웹 데이터 파일이 없습니다. 기본값을 사용합니다.');
-                }
-            } catch (error) {
-                console.error('웹 데이터 로드 실패:', error);
-            }
-        }
-
-        // 🔥 웹 데이터 저장 함수
+        // 🔥 웹 데이터 저장 함수 수정 - localStorage와 웹 데이터 파일 모두 저장
         async function saveWebData() {
             try {
                 webData.metadata.lastUpdated = new Date().toISOString();
@@ -1000,13 +934,129 @@
                     currentRealDate: currentRealDate
                 };
                 
+                // 🔥 localStorage에 저장 (즉시 사용 가능)
                 localStorage.setItem('webDataBackup', JSON.stringify(webData));
                 
-                console.log('웹 데이터 저장 완료:', webData);
+                // 🔥 웹 데이터 파일에도 저장 시도 (실제 서버 환경용)
+                try {
+                    // 이 부분은 실제 서버 환경에서 구현해야 합니다
+                    // 예: fetch('/api/save-data', { method: 'POST', body: JSON.stringify(webData) })
+                    console.log('웹 데이터 저장 완료 (localStorage):', webData);
+                } catch (webError) {
+                    console.log('웹 데이터 파일 저장 실패 (로컬 환경):', webError);
+                }
                 
             } catch (error) {
                 console.error('웹 데이터 저장 실패:', error);
             }
+        }
+
+        // 🔥 웹 데이터 로드 함수 수정 - localStorage에서 먼저 시도
+        async function loadWebData() {
+            try {
+                // 🔥 먼저 localStorage에서 시도
+                const localData = localStorage.getItem('webDataBackup');
+                if (localData) {
+                    console.log('localStorage에서 데이터 로드');
+                    webData = JSON.parse(localData);
+                } else {
+                    // localStorage에 없으면 웹 파일에서 시도
+                    console.log('localStorage에 데이터 없음, 웹 파일에서 시도');
+                    const response = await fetch(WEB_DATA_FILE);
+                    if (response.ok) {
+                        webData = await response.json();
+                    }
+                }
+                
+                if (webData.cacheData) {
+                    dataCache = new Map(webData.cacheData.dataCache || []);
+                    dateToIdCache = new Map(webData.cacheData.dateToIdCache || []);
+                    dateIdCache = new Map(webData.cacheData.dateIdCache || []);
+                }
+                
+                if (webData.themeData) {
+                    themeDataCache = webData.themeData.data || {};
+                    currentThemeFileName = webData.themeData.fileName || '';
+                    updateUploadInfo();
+                }
+                
+                if (webData.baseSettings) {
+                    baseUrl = webData.baseSettings.baseUrl || baseUrl;
+                    baseId = webData.baseSettings.baseId || baseId;
+                    baseDate = new Date(webData.baseSettings.baseDate || baseDate);
+                    currentId = webData.currentState?.currentId || baseId;
+                    
+                    document.getElementById('baseUrlInput').value = baseUrl;
+                    document.getElementById('baseIdInput').value = baseId;
+                    document.getElementById('baseDateDisplay').textContent = formatDate(baseDate);
+                    updateUrlInput();
+                }
+                
+                console.log('웹 데이터 로드 성공:', webData);
+                
+            } catch (error) {
+                console.error('웹 데이터 로드 실패:', error);
+                // 🔥 에러 발생 시 기본값으로 초기화
+                initializeDefaultData();
+            }
+        }
+
+        // 🔥 초기화 함수 수정 - 데이터 로드 후 즉시 적용
+        async function initialize() {
+            loadBaseSettings();
+            
+            await loadWebData();
+            
+            const targetDate = getTargetDateByCurrentTime();
+            const tradingDate = await findLatestTradingDay(targetDate);
+            
+            currentId = await getTradingDayIdFromDate(tradingDate);
+            
+            updateUrlInput();
+            await updateDateDisplay();
+            
+            await loadHolidaysForYear(2025);
+            await loadHolidaysForYear(2026);
+            
+            // 🔥 테마 데이터가 있으면 즉시 적용
+            if (themeDataCache && Object.keys(themeDataCache).length > 0) {
+                console.log('저장된 테마 데이터 적용:', Object.keys(themeDataCache).length + '개 종목');
+                updateUploadInfo();
+            }
+            
+            updateCacheInfo();
+            
+            // 🔥 캐시된 데이터가 있으면 즉시 표시
+            if (dataCache.has(currentId)) {
+                console.log('캐시된 데이터 즉시 표시');
+                const cachedData = dataCache.get(currentId);
+                currentRealDate = cachedData.date;
+                
+                const updatedData = await applyCurrentThemeToData(cachedData.data);
+                createTable(updatedData);
+                showSuccess('저장된 데이터를 불러왔습니다!');
+            } else {
+                fetchData();
+            }
+            
+            document.addEventListener('click', function(event) {
+                const calendar = document.getElementById('calendar');
+                const currentDate = document.getElementById('currentDate');
+                const settingsCalendar = document.getElementById('settingsCalendar');
+                const baseDateDisplay = document.getElementById('baseDateDisplay');
+                
+                if (calendarVisible && 
+                    !calendar.contains(event.target) && 
+                    !currentDate.contains(event.target)) {
+                    hideCalendar();
+                }
+                
+                if (settingsCalendarVisible && 
+                    !settingsCalendar.contains(event.target) && 
+                    !baseDateDisplay.contains(event.target)) {
+                    hideSettingsCalendar();
+                }
+            });
         }
 
         // 🔥 캐시 정보 업데이트 함수
@@ -1228,7 +1278,7 @@
             reader.readAsText(file);
         }
 
-        // 🔥 모든 데이터 초기화 함수
+        // 🔥 모든 데이터 초기화 함수 수정
         function clearAllData() {
             if (!confirm('정말로 모든 데이터를 초기화하시겠습니까?\n기본 설정, 테마 데이터, 캐시 데이터가 모두 삭제됩니다.\n이 작업은 되돌릴 수 없습니다.')) {
                 return;
@@ -1239,15 +1289,21 @@
                 dateToIdCache.clear();
                 dateIdCache.clear();
                 holidaysCache = {};
-                themeDataCache = {};
-                currentThemeFileName = '';
                 
+                // 🔥 localStorage도 클리어
+                localStorage.removeItem('webDataBackup');
+                
+                // 🔥 기본값으로 재설정
                 baseUrl = 'https://stockinfo7.com/stock/top30/text/';
                 baseId = 1537;
                 baseDate = new Date('2025-10-21');
                 currentId = baseId;
                 currentRealDate = '';
                 
+                // 🔥 기본 테마 데이터로 재설정
+                initializeDefaultData();
+                
+                // UI 업데이트
                 document.getElementById('baseUrlInput').value = baseUrl;
                 document.getElementById('baseIdInput').value = baseId;
                 document.getElementById('baseDateDisplay').textContent = formatDate(baseDate);
@@ -1255,10 +1311,13 @@
                 
                 updateUploadInfo();
                 updateCacheInfo();
+                
+                // 🔥 웹 데이터 저장 (기본값으로)
                 saveWebData();
                 
                 showSuccess('모든 데이터가 초기화되었습니다!');
                 
+                // 화면 새로고침
                 setTimeout(() => {
                     location.reload();
                 }, 1000);
@@ -1579,29 +1638,15 @@
                     console.log(`웹 데이터에서 테마 데이터 로드: ${Object.keys(themeDataCache).length}개 종목`);
                     updateUploadInfo();
                 } else {
-                    themeDataCache = {
-                        '삼성전자': { main: '반도체', sub: '메모리반도체' },
-                        'SK하이닉스': { main: '반도체', sub: '메모리반도체' },
-                        '현대차': { main: '자동차', sub: '완성차' },
-                        '기아': { main: '자동차', sub: '완성차' },
-                        'LG에너지솔루션': { main: '2차전지', sub: '배터리' },
-                        'POSCO홀딩스': { main: '철강', sub: '제철' },
-                        'NAVER': { main: '인터넷', sub: '플랫폼' },
-                        '카카오': { main: '인터넷', sub: '플랫폼' }
-                    };
-                    currentThemeFileName = '기본 데이터';
-                    console.log('기본 테마 데이터 사용');
-                    updateUploadInfo();
+                    initializeDefaultData();
                 }
             } catch (error) {
                 console.error('테마 데이터 로드 실패:', error);
-                themeDataCache = {};
-                currentThemeFileName = '데이터 없음';
-                updateUploadInfo();
+                initializeDefaultData();
             }
         }
 
-        // 🔥 파일 업로드 처리 함수
+        // 🔥 파일 업로드 처리 함수 수정 - 즉시 저장
         function uploadExcelFile() {
             const fileInput = document.getElementById('excelFileUpload');
             const file = fileInput.files[0];
@@ -1630,6 +1675,10 @@
                 try {
                     const data = e.target.result;
                     parseUploadedExcel(data, file.name);
+                    
+                    // 🔥 파일 입력 초기화 (같은 파일 다시 업로드 가능하도록)
+                    fileInput.value = '';
+                    
                 } catch (error) {
                     showError('엑셀 파일 읽기 중 오류: ' + error.message);
                 }
@@ -1813,6 +1862,7 @@
                 updateUploadInfo();
                 showSuccess(`엑셀 파일에서 ${Object.keys(newThemeData).length}개 종목의 테마 데이터를 로드했습니다! (최신 날짜 기준)`);
                 
+                // 🔥 즉시 저장
                 saveWebData();
 
                 if (dataCache.has(currentId)) {
@@ -1908,7 +1958,7 @@
             }
         }
 
-        // 🔥 테마 데이터 초기화 함수
+        // 🔥 테마 데이터 초기화 함수 수정
         function clearThemeData() {
             if (!confirm('저장된 테마 데이터를 초기화하시겠습니까?\n엑셀에서 업로드한 모든 테마 정보가 삭제됩니다.')) {
                 return;
@@ -1917,9 +1967,14 @@
             try {
                 themeDataCache = {};
                 currentThemeFileName = '';
-                loadThemeData();
+                
+                // 🔥 기본 테마 데이터 로드
+                initializeDefaultData();
+                
+                // 🔥 웹 데이터 저장
                 saveWebData();
                 
+                // 🔥 현재 표시 중인 데이터도 업데이트
                 if (dataCache.has(currentId)) {
                     const currentData = dataCache.get(currentId);
                     if (currentData && Array.isArray(currentData.data)) {
@@ -2529,6 +2584,11 @@
                 nextBtn.disabled = false;
             }
         }
+
+        // 🔥 페이지 언로드 시 데이터 자동 저장
+        window.addEventListener('beforeunload', function() {
+            saveWebData();
+        });
 
         window.addEventListener('resize', function() {
             if (calendarVisible) {
