@@ -552,6 +552,13 @@ select{font-size:13px;padding:9px 10px;border-radius:var(--rad-sm);border:1px so
         </select>
         <button class="btn primary" onclick="generate()">조합 추천 →</button>
       </div>
+      <div class="gen-row" style="margin-top:8px;">
+        <select id="m-consSel" style="flex:1;">
+          <option value="auto" selected>연속번호 자연발생</option>
+          <option value="target45">연속번호 ~45% 반영</option>
+          <option value="force">연속번호 1쌍 이상 포함</option>
+        </select>
+      </div>
       <div class="warn-bar" id="m-warn"></div>
     </div>
   </div>
@@ -631,6 +638,13 @@ select{font-size:13px;padding:9px 10px;border-radius:var(--rad-sm);border:1px so
           <option value="10">10개</option>
         </select>
         <button class="btn primary" onclick="generate()" style="font-size:12px;padding:7px 14px;">조합 추천 →</button>
+      </div>
+      <div class="gen-row" style="gap:8px;margin-top:8px;">
+        <select id="d-consSel" style="flex:1;font-size:12px;">
+          <option value="auto" selected>연속번호 자연발생</option>
+          <option value="target45">연속번호 ~45% 반영</option>
+          <option value="force">연속번호 1쌍 이상 포함</option>
+        </select>
       </div>
       <div class="warn-bar" id="d-warn"></div>
 
@@ -897,24 +911,100 @@ function refreshWin(){
   });
 }
 
-/* ── Generate ── */
-function shuffle(a){const b=[...a];for(let i=b.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[b[i],b[j]]=[b[j],b[i]];}return b;}
+/* ── Generate: 역대 당첨통계 가중치 + 합계/홀짝/고저 균형 필터 ──
+   * 동행복권 로또6/45 1~1239회 전수 기준(2026-08-29 1239회 결과 반영)
+   *   역대 최다 출현 TOP8 / 최소 출현 TOP8, 그 외 번호는 역대 평균 출현 165회로 처리
+   *   (평균 출현 = 총 출현수 ÷ 45, 1239회 기준 약 165회) */
+const FREQ_HOT  = {34:186,13:181,27:181,12:180,18:178,33:175,45:175,37:174};
+const FREQ_COLD = {9:136,22:146,32:146,23:148,41:150,5:153,25:153,2:156};
+const FREQ_AVG  = 165;
+function numWeight(n){ return FREQ_HOT[n] || FREQ_COLD[n] || FREQ_AVG; }
+
+// 가중치 기반 비복원추출로 6개 선택 (자주 나온 번호일수록 뽑힐 확률↑)
+function weightedPick(pool){
+  const arr=pool.map(n=>({n,w:numWeight(n)}));
+  const picked=[];
+  for(let k=0;k<6 && arr.length>0;k++){
+    const total=arr.reduce((s,x)=>s+x.w,0);
+    let r=Math.random()*total, idx=0;
+    for(;idx<arr.length-1;idx++){ r-=arr[idx].w; if(r<=0) break; }
+    picked.push(arr[idx].n);
+    arr.splice(idx,1);
+  }
+  return picked.sort((a,b)=>a-b);
+}
+
+// 역대 당첨조합 통계상 흔한 범위인지 체크: 합계 100~175, 홀짝 2~4, 저(1~22)/고(23~45) 2~4
+function comboOk(pick){
+  const sum=pick.reduce((a,b)=>a+b,0);
+  if(sum<100||sum>175) return false;
+  const odd=pick.filter(n=>n%2===1).length;
+  if(odd<2||odd>4) return false;
+  const low=pick.filter(n=>n<=22).length;
+  if(low<2||low>4) return false;
+  return true;
+}
+
+// 연속번호(예: 12,13) 포함 여부
+function hasConsecutive(pick){
+  for(let i=0;i<pick.length-1;i++){ if(pick[i+1]-pick[i]===1) return true; }
+  return false;
+}
+function shuffleArr(a){const b=[...a];for(let i=b.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[b[i],b[j]]=[b[j],b[i]];}return b;}
+
 function generate(){
   const all=[]; setData.forEach(s=>s.forEach(n=>all.push(n)));
   const pool=[...new Set(all)];
   const mob=isMobile();
   const warnId=mob?'m-warn':'d-warn';
   const countId=mob?'m-countSel':'d-countSel';
+  const consId=mob?'m-consSel':'d-consSel';
   const warn=document.getElementById(warnId);
   if(pool.length<6){ warn.textContent=`고유 번호가 ${pool.length}개뿐이에요. 최소 6개 이상 필요해요.`; warn.style.display='block'; return; }
   warn.style.display='none';
   const count=+document.getElementById(countId).value;
-  combos=[];const seen=new Set();let tries=0;
-  while(combos.length<count&&tries<30000){
+  const consSelEl=document.getElementById(consId);
+  const consMode=consSelEl?consSelEl.value:'auto'; // 'auto' | 'target45' | 'force'
+
+  // 후보 조합을 넉넉히 모아서 연속번호 있는 것/없는 것으로 나눠둠
+  const withCons=[],withoutCons=[];const seen=new Set();
+  let tries=0;const need=Math.max(count*6,60);
+  while((withCons.length+withoutCons.length)<need&&tries<40000){
     tries++;
-    const pick=shuffle(pool).slice(0,6).sort((a,b)=>a-b);
+    const pick=weightedPick(pool);
+    if(pick.length<6) break;
+    // 시도 대부분은 합계/홀짝/저고 조건을 적용, 막판엔 풀이 작을 때 대비해 조건 완화
+    if(tries<need*3 && !comboOk(pick)) continue;
     const key=pick.join('-');
-    if(!seen.has(key)){seen.add(key);combos.push(pick);}
+    if(seen.has(key)) continue;
+    seen.add(key);
+    (hasConsecutive(pick)?withCons:withoutCons).push(pick);
+  }
+
+  combos=[];
+  if(consMode==='force'){
+    combos=withCons.slice(0,count);
+    let extra=0;
+    while(combos.length<count&&extra<20000){
+      extra++;
+      const pick=weightedPick(pool);
+      if(pick.length<6) break;
+      if(!hasConsecutive(pick)) continue;
+      const key=pick.join('-');
+      if(seen.has(key)) continue;
+      seen.add(key);combos.push(pick);
+    }
+  } else if(consMode==='target45'){
+    const wantCons=Math.round(count*0.45);
+    const wantPlain=count-wantCons;
+    let picked=[...withCons.slice(0,wantCons),...withoutCons.slice(0,wantPlain)];
+    if(picked.length<count){
+      const pad=[...withCons.slice(wantCons),...withoutCons.slice(wantPlain)];
+      picked=picked.concat(pad.slice(0,count-picked.length));
+    }
+    combos=shuffleArr(picked).slice(0,count);
+  } else {
+    combos=shuffleArr([...withCons,...withoutCons]).slice(0,count);
   }
   renderResults();
   // mobile: scroll to results
